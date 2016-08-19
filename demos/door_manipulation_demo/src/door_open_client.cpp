@@ -18,10 +18,10 @@
 bool g_caught_sigint=false;
 
 void sig_handler(int sig) {
-  g_caught_sigint = true;
-  ROS_INFO("caught sigint, init shutdown sequence...");
-  ros::shutdown();
-  exit(1);
+    g_caught_sigint = true;
+    ROS_INFO("caught sigint, init shutdown sequence...");
+    ros::shutdown();
+    exit(1);
 };
 
 int main(int argc, char **argv) {
@@ -30,7 +30,6 @@ int main(int argc, char **argv) {
     actionlib::SimpleActionClient<door_manipulation_demo::PushDoorAction> ac("door_open_as", true);
     ac.waitForServer();
     ROS_INFO("Waiting for action server to start.");
-
     
     //register ctrl-c
     signal(SIGINT, sig_handler);
@@ -43,8 +42,6 @@ int main(int argc, char **argv) {
     ROS_INFO("waiting for push door results...");
     ac.waitForResult();
     //wait for the action to return
-
-
     ROS_INFO(" push door action  finished.");
 
 }

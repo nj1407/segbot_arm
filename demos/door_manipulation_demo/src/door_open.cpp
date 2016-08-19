@@ -109,10 +109,10 @@ bool similar(float x1, float x2){
 
 void sig_handler(int sig)
 {
-  g_caught_sigint = true;
-  ROS_INFO("caught sigint, init shutdown sequence...");
-  ros::shutdown();
-  exit(1);
+    g_caught_sigint = true;
+    ROS_INFO("caught sigint, init shutdown sequence...");
+    ros::shutdown();
+    exit(1);
 };
 
 
@@ -128,7 +128,7 @@ moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs:
     /* Call the service */
     if(ikine_client.call(ikine_request, ikine_response)){
         ROS_INFO("IK service call success:");
-        //ROS_INFO_STREAM(ikine_response);
+   
     } else {
         ROS_INFO("IK service call FAILED. Exiting");
     }
@@ -137,7 +137,6 @@ moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs:
 }
 
 //get the recorded topics
-
 void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
     
     if (input->position.size() == NUM_JOINTS){
@@ -150,8 +149,9 @@ void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
 // Blocking call for user input
 void pressEnter(){
     std::cout << "Press the ENTER key to continue";
-    while (std::cin.get() != '\n')
+    while (std::cin.get() != '\n'){
         std::cout << "Please press ENTER\n";
+    }    
 }
 
 //listen for where the arm is 
@@ -163,9 +163,9 @@ void listenForArmData(float rate){
     while (ros::ok()){
         ros::spinOnce();
         
-        if (heardPose && heardJoinstState)
+        if (heardPose && heardJoinstState){
             return;
-        
+        }
         r.sleep();
     }
 }
@@ -173,21 +173,21 @@ void listenForArmData(float rate){
 //get the first approach goal
 void goal_cb (const geometry_msgs::PoseStampedConstPtr& input)
 {
-        ROS_INFO("entered goal_cb");
-        first_goal.header = input->header;
-        first_goal.pose = input->pose; 
-        first_goal.pose.position.x -= .05;
-        second_goal.header = input->header;
-        second_goal.pose = input->pose;
-        second_goal.pose.position.x += .15;
-        heardGoal = true;
-        
+    ROS_INFO("entered goal_cb");
+    first_goal.header = input->header;
+    first_goal.pose = input->pose; 
+    first_goal.pose.position.x -= .05;
+    second_goal.header = input->header;
+    second_goal.pose = input->pose;
+    second_goal.pose.position.x += .15;
+    heardGoal = true;
+    
 }
 void toolpos_cb (const geometry_msgs::PoseStampedConstPtr& input)
 {
-        ROS_INFO("entered toolposecb");
-        current_pose.header = input->header;
-        current_pose.pose = input->pose;
+    ROS_INFO("entered toolposecb");
+    current_pose.header = input->header;
+    current_pose.pose = input->pose;
         
 }
 
@@ -295,28 +295,28 @@ int main (int argc, char** argv)
         moveit_msgs::GetPositionIK::Response  ik_response_approach = segbot_arm_manipulation::computeIK(n,temp_first_goal);
         //see if passed inverse kinematics
         if (ik_response_approach.error_code.val == 1){
+            if (ik_response_approach.error_code.val == 1){
+                //check if can move forward afterwards 
+                temp_second_goal.pose.position.x += .05;
+                moveit_msgs::GetPositionIK::Response  ik_response_approach = segbot_arm_manipulation::computeIK(n,temp_second_goal);
                 if (ik_response_approach.error_code.val == 1){
-                    //check if can move forward afterwards 
-                    temp_second_goal.pose.position.x += .05;
-                    moveit_msgs::GetPositionIK::Response  ik_response_approach = segbot_arm_manipulation::computeIK(n,temp_second_goal);
-                    if (ik_response_approach.error_code.val == 1){
-                            std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(current_state, ik_response_approach.solution.joint_state);
+                    std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(current_state, ik_response_approach.solution.joint_state);
+                    
+                    double sum_d = 0;
+                    for (int p = 0; p < D.size(); p++){
+                        sum_d += D[p];
+                    }
                             
-                            double sum_d = 0;
-                            for (int p = 0; p < D.size(); p++){
-                                sum_d += D[p];
-                            }
-                                
-                                    if (sum_d < ANGULAR_DIFF_THRESHOLD && sum_d > 1){
-                                        //now check to see how close the two sets of joint angles are -- if the joint configurations for the approach and grasp poses differ by too much, the grasp will not be accepted
-                                        ROS_INFO("Sum diff: %f",sum_d);
-                                        ROS_INFO("added to push commands size"); //%d", push_commands.size());
-                                        //store the IK results
-                                        
-                                        push_commands.push_back(temp_first_goal);
-                                    }
-                            }   
-                }
+                    if (sum_d < ANGULAR_DIFF_THRESHOLD && sum_d > 1){
+                        //now check to see how close the two sets of joint angles are -- if the joint configurations for the approach and grasp poses differ by too much, the grasp will not be accepted
+                        ROS_INFO("Sum diff: %f",sum_d);
+                        ROS_INFO("added to push commands size"); //%d", push_commands.size());
+                        //store the IK results
+                        
+                        push_commands.push_back(temp_first_goal);
+                    }
+                }   
+            }
                         
         }
                 
@@ -345,113 +345,113 @@ int main (int argc, char** argv)
         }
                 
                     
-        if (selected_push_index == -1 || selected_push_index > push_commands.size()){
-            ROS_WARN("selection failed. kill.");
+    if (selected_push_index == -1 || selected_push_index > push_commands.size()){
+        ROS_WARN("selection failed. kill.");
+            
+    } else {
+
+        pressEnter();
+        ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
+        first_goal_pub.publish(first_goal);
+
+        
+        
+        //made vision calls check in rviz to see if correct then procede
+        pressEnter();
+        
+        ROS_INFO("Demo starting...Move the arm to a 'ready' position .");
+        
+        ros::spinOnce();
+        
+        
+        pressEnter();
+        ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
+        segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
+        ros::spinOnce();                                            
+        segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
+        ros::spinOnce(); 
+        segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
+        ros::spinOnce(); 
+        bool isReachable = false;
+        //check if second goal is possible for back up if arm driver not in configuration not to move forward
+        moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
+        if(ik_response_approach.error_code.val == 1){
+                    ROS_INFO("entered first pose passed");
+                    second_goal_pub.publish(second_goal);
+                    isReachable = true;
+        } else{ 
+            while( changex1 < 15 && !isReachable){
+                second_goal.pose.position.z -= .01;
                 
-        } else {
-
-            pressEnter();
-            ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
-            first_goal_pub.publish(first_goal);
-
-            
-            
-            //made vision calls check in rviz to see if correct then procede
-            pressEnter();
-            
-            ROS_INFO("Demo starting...Move the arm to a 'ready' position .");
-            
-            ros::spinOnce();
-            
-            
-            pressEnter();
-            ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
-            segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
-            ros::spinOnce();                                            
-            segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
-            ros::spinOnce(); 
-            segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
-            ros::spinOnce(); 
-            bool isReachable = false;
-            //check if second goal is possible for back up if arm driver not in configuration not to move forward
-            moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
-            if(ik_response_approach.error_code.val == 1){
-                        ROS_INFO("entered first pose passed");
+                while( changey1 < 15 && !isReachable){
+                    second_goal.pose.position.y += .01;
+                    moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
+                    
+                    if(ik_response_approach.error_code.val == 1){
+                        ROS_INFO("entered second pose passed");
                         second_goal_pub.publish(second_goal);
                         isReachable = true;
-            } else{ 
-                while( changex1 < 15 && !isReachable){
-                    second_goal.pose.position.z -= .01;
-                    
-                    while( changey1 < 15 && !isReachable){
-                        second_goal.pose.position.y += .01;
-                        moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
-                        
-                        if(ik_response_approach.error_code.val == 1){
-                            ROS_INFO("entered second pose passed");
-                            second_goal_pub.publish(second_goal);
-                            isReachable = true;
-                        }   
-                        
-                        changey1 ++;
                     }   
-                    changex1 ++;
+                    
+                    changey1 ++;
                 }   
-            }
-            //move forward at this point
-            ROS_INFO("moving forward");
-            pressEnter();
-            double timeoutSeconds = 3.85;
-            int rateHertz = 100;
-            geometry_msgs::TwistStamped velocityMsg;
-            
-            ros::Rate r(rateHertz);
-            for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++) {
-                
-                velocityMsg.twist.linear.x = 1.25;
-                velocityMsg.twist.linear.y = 0.1;
-                velocityMsg.twist.linear.z = 0.1;
-                
-                velocityMsg.twist.angular.x = 0.0;
-                velocityMsg.twist.angular.y = 0.0;
-                velocityMsg.twist.angular.z = 0.0;
-                
-                
-                pub_velocity.publish(velocityMsg);
-                
-                r.sleep();
+                changex1 ++;
             }   
-            //fail safe if talking directly to driver failed
-            ROS_INFO("fail safe");
-            pressEnter();
-            segbot_arm_manipulation::moveToPoseMoveIt(n,second_goal);
-            ros::spinOnce();                 
-            segbot_arm_manipulation::moveToPoseMoveIt(n,second_goal);
-            ros::spinOnce();  
-            pressEnter();
-            
-            //return back to home position
-            ROS_INFO("Demo ending...arm will move back 'ready' position .");
-            segbot_arm_manipulation::homeArm(n);
-            segbot_arm_manipulation::homeArm(n);
-            
-            //do a vision call to see if the dorr has moved
-            if(client.call(door_srv)){
-                ros::spinOnce();
-
-            } else {
-                    ROS_INFO("didn't enter vision");
-            }
-            
-            //check if door has moved and sent response of the action
-            if(similar(orig_plane_coeff.x, plane_coeff.x) && similar(orig_plane_coeff.y, plane_coeff.y) && similar(orig_plane_coeff.z, plane_coeff.z)
-                && similar(orig_plane_coeff.w, plane_coeff.w)){
-                    ROS_INFO("didn't move  door");
-            } else {
-                    ROS_INFO("moved door");
-            }   
-                
         }
-}       
+        //move forward at this point
+        ROS_INFO("moving forward");
+        pressEnter();
+        double timeoutSeconds = 3.85;
+        int rateHertz = 100;
+        geometry_msgs::TwistStamped velocityMsg;
+        
+        ros::Rate r(rateHertz);
+        for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++) {
+            
+            velocityMsg.twist.linear.x = 1.25;
+            velocityMsg.twist.linear.y = 0.1;
+            velocityMsg.twist.linear.z = 0.1;
+            
+            velocityMsg.twist.angular.x = 0.0;
+            velocityMsg.twist.angular.y = 0.0;
+            velocityMsg.twist.angular.z = 0.0;
+            
+            
+            pub_velocity.publish(velocityMsg);
+            
+            r.sleep();
+        }   
+        //fail safe if talking directly to driver failed
+        ROS_INFO("fail safe");
+        pressEnter();
+        segbot_arm_manipulation::moveToPoseMoveIt(n,second_goal);
+        ros::spinOnce();                 
+        segbot_arm_manipulation::moveToPoseMoveIt(n,second_goal);
+        ros::spinOnce();  
+        pressEnter();
+        
+        //return back to home position
+        ROS_INFO("Demo ending...arm will move back 'ready' position .");
+        segbot_arm_manipulation::homeArm(n);
+        segbot_arm_manipulation::homeArm(n);
+        
+        //do a vision call to see if the dorr has moved
+        if(client.call(door_srv)){
+            ros::spinOnce();
+
+        } else {
+                ROS_INFO("didn't enter vision");
+        }
+        
+        //check if door has moved and sent response of the action
+        if(similar(orig_plane_coeff.x, plane_coeff.x) && similar(orig_plane_coeff.y, plane_coeff.y) && similar(orig_plane_coeff.z, plane_coeff.z)
+            && similar(orig_plane_coeff.w, plane_coeff.w)){
+                ROS_INFO("didn't move  door");
+        } else {
+                ROS_INFO("moved door");
+        }   
+            
+        }
+    }       
                 
 };

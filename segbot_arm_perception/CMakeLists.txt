@@ -2,16 +2,16 @@ cmake_minimum_required(VERSION 2.8.3)
 project(segbot_arm_perception)
 
 find_package(catkin REQUIRED
-	pcl_ros
-	pcl_conversions
-	sensor_msgs
-	geometry_msgs
-	std_msgs
-	std_srvs
-	roscpp
-	rospy
- 	message_generation
- 	actionlib_msgs
+    pcl_ros
+    pcl_conversions
+    sensor_msgs
+    geometry_msgs
+    std_msgs
+    std_srvs
+    roscpp
+    rospy
+    message_generation
+    actionlib_msgs
 )
 
 add_service_files(
@@ -26,16 +26,7 @@ add_service_files(
    GetCloud.srv
 )
 
-<<<<<<< HEAD
 generate_messages(
-=======
-# add_action_files(
-#   DIRECTORY action
-#   FILES LogPerception.action
-#)
-
- generate_messages(
->>>>>>> e2a5e20ae9970b5ba4061d3c3e49fec332b51de5
    DEPENDENCIES
    std_msgs
    std_srvs
@@ -50,8 +41,8 @@ catkin_package(
 )
 
 include_directories(
-	include
-	${catkin_INCLUDE_DIRS}
+    include
+    ${catkin_INCLUDE_DIRS}
 )
 
 install(DIRECTORY include/${PROJECT_NAME}/
