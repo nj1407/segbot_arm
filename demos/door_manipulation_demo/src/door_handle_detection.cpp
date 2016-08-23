@@ -222,7 +222,7 @@ void computeClusters(PointCloudT::Ptr in, double tolerance){
         cloud_cluster->is_dense = true;
 
         clusters.push_back(cloud_cluster);
-  }
+    }
 }
 
 void waitForCloud(){
@@ -404,8 +404,6 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
     //used to get goal xyz
     pcl::compute3DCentroid(*cloud_blobs,centroid);
     
-    //do the tf transformation for the published cloud
-    
     //get pose
     geometry_msgs::PoseStamped goal;
     goal.pose.position.x = centroid.x();
@@ -461,7 +459,6 @@ int main (int argc, char** argv)
     //service
     ros::ServiceServer service = n.advertiseService("door_handle_detection/door_perception", seg_cb);
     ros::ServiceClient client = n.serviceClient<door_manipulation_demo::door_perception>("door_perception");
-
     
     //move_point = n.advertise<PCLCloudXYZ> ("point_to_send/cloud", 1);
     goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_to_go", 1);
@@ -470,10 +467,9 @@ int main (int argc, char** argv)
     double ros_rate = 3.0;
     ros::Rate r(ros_rate);
 
-  
     while (!g_caught_sigint && ros::ok())
     {
-            
+           
         //collect messages
         ros::spinOnce();
         r.sleep();
