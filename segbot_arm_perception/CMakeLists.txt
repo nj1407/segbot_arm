@@ -26,16 +26,7 @@ add_service_files(
    GetCloud.srv
 )
 
-<<<<<<< HEAD
 generate_messages(
-=======
-# add_action_files(
-#   DIRECTORY action
-#   FILES LogPerception.action
-#)
-
- generate_messages(
->>>>>>> e2a5e20ae9970b5ba4061d3c3e49fec332b51de5
    DEPENDENCIES
    std_msgs
    std_srvs
