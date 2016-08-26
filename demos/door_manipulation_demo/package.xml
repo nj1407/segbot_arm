@@ -57,7 +57,6 @@
   <build_depend>moveit_ros_planning_interface</build_depend>
   <build_depend>moveit_msgs</build_depend>
   <build_depend>segbot_arm_manipulation</build_depend>
-  <build_depend>opencv2</build_depend>
   <run_depend>message_generation</run_depend> 
   <run_depend>segbot_arm_manipulation</run_depend>
   <run_depend>moveit_utils</run_depend>
