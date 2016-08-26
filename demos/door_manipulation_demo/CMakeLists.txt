@@ -75,8 +75,8 @@ add_executable(door_open_client src/door_open_client.cpp)
 ## same as for the library above
 add_dependencies(door_handle_detection door_demo_manipulation_gencpp)
 add_dependencies(door_open door_demo_manipulation_gencpp)
-add_dependencies(door_open_as jaco_msgs_gencpp segbot_arm_manipulation_gencpp ${catkin_EXPORTED_TARGETS})
-add_dependencies(door_open_client jaco_msgs_gencpp segbot_arm_manipulation_gencpp ${catkin_EXPORTED_TARGETS})
+add_dependencies(door_open_as jaco_msgs_gencpp segbot_arm_manipulation_gencpp ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_dependencies(door_open_client jaco_msgs_gencpp segbot_arm_manipulation_gencpp ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(door_handle_detection ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
