@@ -19,7 +19,6 @@
   <build_depend>moveit_msgs</build_depend>
   <build_depend>move_base_msgs</build_depend>
   <build_depend>segbot_arm_perception</build_depend>
-  <build_depend>segbot_arm_manipulation</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>agile_grasp</build_depend>
 
