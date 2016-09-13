@@ -8,22 +8,16 @@
 #include <math.h>
 #include <cstdlib>
 #include <std_msgs/String.h>
-
 #include <sensor_msgs/PointCloud2.h>
-
 #include <Eigen/Dense>
 #include <eigen_conversions/eigen_msg.h>
-
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float32.h>
-
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-
-
 // PCL specific includes
 #include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -34,28 +28,21 @@
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/common/time.h>
 #include <pcl/common/common.h>
-
 //actions
 #include <actionlib/client/simple_action_client.h>
 #include "jaco_msgs/SetFingersPositionAction.h"
 #include "jaco_msgs/ArmPoseAction.h"
 #include "jaco_msgs/ArmJointAnglesAction.h"
-
 #include <pcl/kdtree/kdtree.h>
 #include <pcl_ros/impl/transforms.hpp>
-
 //including package services 
 #include "door_manipulation_demo/door_perception.h"
-
-
 #include <tf/transform_listener.h>
 #include <tf/tf.h>
-
 #include <moveit_msgs/DisplayRobotState.h>
 // Kinematics
 #include <moveit_msgs/GetPositionFK.h>
 #include <moveit_msgs/GetPositionIK.h>
-
 #include <moveit_utils/AngularVelCtrl.h>
 #include <moveit_utils/MicoMoveitJointPose.h>
 #include <moveit_utils/MicoMoveitCartesianPose.h>
@@ -134,7 +121,6 @@ void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
         heardJoinstState = true;
     }
 }
-
 
 // Blocking call for user input
 void pressEnter(){
@@ -248,7 +234,6 @@ protected:
         moveit_msgs::GetPositionIK::Response ikine_response;
         ikine_request.ik_request.group_name = "arm";
         ikine_request.ik_request.pose_stamped = p;
-        
         /* Call the service */
         if(ikine_client.call(ikine_request, ikine_response)){
             ROS_INFO("IK service call success:");
@@ -274,18 +259,15 @@ protected:
         
         first_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("goal_picked", 1);
         second_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("goal_to_go_2", 1);
-        
         signal(SIGINT, sig_handler);
-        
         
         //get arm position
         segbot_arm_manipulation::closeHand();
-        
         //set goal for mico service
         door_manipulation_demo::door_perception door_srv;
         moveit_utils::MicoMoveitCartesianPose mico_srv;
         mico_srv.request.target = first_goal;
-        
+        //home arm and move it to the start pose out of xtion vision
         segbot_arm_manipulation::homeArm(nh_);
         ros::spinOnce();
         segbot_arm_manipulation::moveToPoseMoveIt(nh_,start_pose);
@@ -303,6 +285,7 @@ protected:
             result_.success = false;
             as_.setSucceeded(result_);
         }
+        //save plane coefficents
         orig_plane_coeff = plane_coeff; 
         //make an array of poses for first goal     
         geometry_msgs::PoseArray poses_msg_first;
@@ -343,11 +326,9 @@ protected:
             changez++;
         }
         
-        //here, we'll store all the oush options that pass the filters
+        //here, we'll store all the push options that pass the filters
         std::vector<geometry_msgs::PoseStamped> push_commands;
-            
         for (unsigned int i = 0; i < poses_msg_first.poses.size(); i++){
-                    
             geometry_msgs::PoseStamped temp_first_goal; 
             temp_first_goal.header = poses_msg_first.header;
             temp_first_goal.pose = poses_msg_first.poses.at(i);
@@ -362,7 +343,6 @@ protected:
                     moveit_msgs::GetPositionIK::Response  ik_response_approach = segbot_arm_manipulation::computeIK(nh_,temp_second_goal);
                     if (ik_response_approach.error_code.val == 1){
                         std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(current_state, ik_response_approach.solution.joint_state);
-                                
                         double sum_d = 0;
                         for (int p = 0; p < D.size(); p++){
                             sum_d += D[p];
@@ -373,24 +353,19 @@ protected:
                             ROS_INFO("Sum diff: %f",sum_d);
                             ROS_INFO("added to push commands size"); //%d", push_commands.size());
                             //store the IK results
-                            
                             push_commands.push_back(temp_first_goal);
                         }
                     }   
                 }
-                            
             }
-                    
         }
         
         //check to see if all potential grasps have been filtered out
         if (push_commands.size() == 0){
             ROS_INFO("No feasible poses found demo done.");
-        
         } else{
             
             int selected_push_index = -1;
-            
             //find the grasp with closest orientatino to current pose
             double min_diff = 1000000.0;
             for (unsigned int i = 0; i < push_commands.size(); i++){
@@ -409,22 +384,17 @@ protected:
                 as_.setPreempted();
                 result_.success = false;
                 as_.setSucceeded(result_);
-                    
             } else {
-        
                 pressEnter();
                 ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
                 first_goal_pub.publish(first_goal);
-        
                 //made vision calls check in rviz to see if correct then procede
                 pressEnter();
-                
                 ROS_INFO("Demo starting...Move the arm to a 'ready' position .");
-                
                 ros::spinOnce();
-                
                 pressEnter();
                 ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
+                //move to first goal
                 segbot_arm_manipulation::moveToPoseMoveIt(nh_,first_goal);
                 ros::spinOnce();                                            
                 segbot_arm_manipulation::moveToPoseMoveIt(nh_,first_goal);
@@ -465,14 +435,12 @@ protected:
                 geometry_msgs::TwistStamped velocityMsg;
                 ros::Rate r(rateHertz);
                 for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++) {
-                    
                     velocityMsg.twist.linear.x = 1.25;
                     velocityMsg.twist.linear.y = 0.1;
                     velocityMsg.twist.linear.z = 0.1;
                     velocityMsg.twist.angular.x = 0.0;
                     velocityMsg.twist.angular.y = 0.0;
                     velocityMsg.twist.angular.z = 0.0;
-                    
                     pub_velocity.publish(velocityMsg);
                     r.sleep();
                 }   
@@ -484,20 +452,16 @@ protected:
                 segbot_arm_manipulation::moveToPoseMoveIt(nh_,second_goal);
                 ros::spinOnce();  
                 pressEnter();
-                
                 //return back to home position
                 ROS_INFO("Demo ending...arm will move back 'ready' position .");
                 segbot_arm_manipulation::homeArm(nh_);
                 segbot_arm_manipulation::homeArm(nh_);
-                
                 //do a vision call to see if the dorr has moved
                 if(client.call(door_srv)){
                     ros::spinOnce();
-        
                 } else {
                         ROS_INFO("didn't enter vision");
                 }
-                
                 //check if door has moved and sent response of the action
                 if(similar(orig_plane_coeff.x, plane_coeff.x) && similar(orig_plane_coeff.y, plane_coeff.y) && similar(orig_plane_coeff.z, plane_coeff.z)
                     && similar(orig_plane_coeff.w, plane_coeff.w)){

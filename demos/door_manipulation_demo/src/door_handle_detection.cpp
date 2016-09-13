@@ -8,21 +8,16 @@
 #include <math.h>
 #include <cstdlib>
 #include <std_msgs/String.h>
-
 #include <sensor_msgs/PointCloud2.h>
-
 #include <Eigen/Dense>
 #include <eigen_conversions/eigen_msg.h>
-
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <std_msgs/Float32.h>
 #include <geometry_msgs/PoseStamped.h>
-
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-
 // PCL specific includes
 #include <pcl_ros/point_cloud.h>    
 #include <pcl/conversions.h>
@@ -32,40 +27,30 @@
 #include <pcl/point_types.h>
 #include <pcl/io/openni_grabber.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
-#include <pcl/common/time.h>
-#include <pcl/common/common.h>
-
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
-
 #include <pcl/ModelCoefficients.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
-
 //actions
 #include <actionlib/client/simple_action_client.h>
 #include "jaco_msgs/SetFingersPositionAction.h"
 #include "jaco_msgs/ArmPoseAction.h"
 #include "jaco_msgs/ArmJointAnglesAction.h"
-
 #include <pcl/kdtree/kdtree.h>
 #include <pcl_ros/impl/transforms.hpp>
-
 //including package services 
 #include "door_manipulation_demo/door_perception.h"
-
 // Kinematics
 #include <moveit_msgs/GetPositionFK.h>
 #include <moveit_msgs/GetPositionIK.h>
-
 #include <moveit_utils/AngularVelCtrl.h>
 #include <moveit_utils/MicoMoveitJointPose.h>
 #include <moveit_utils/MicoMoveitCartesianPose.h>
-
 //tf 
 #include <tf/transform_listener.h>
 #define PI 3.14159265

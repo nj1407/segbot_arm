@@ -1,10 +1,7 @@
 #include <ros/ros.h>
-
 #include <signal.h>
-
 #include <sensor_msgs/JointState.h>
 #include <actionlib/client/simple_action_client.h>
-
 //action for pushing
 #include <door_manipulation_demo/PushDoorAction.h>
 #include <actionlib/server/simple_action_server.h>

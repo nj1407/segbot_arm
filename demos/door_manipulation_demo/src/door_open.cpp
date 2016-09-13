@@ -8,25 +8,16 @@
 #include <math.h>
 #include <cstdlib>
 #include <std_msgs/String.h>
-
 #include <sensor_msgs/PointCloud2.h>
-
 #include <Eigen/Dense>
 #include <eigen_conversions/eigen_msg.h>
-
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_msgs/Float32.h>
-
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-
-#include <cstdlib>
-#include <ctime>
-#include <iostream>
-
 // PCL specific includes
 #include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -37,38 +28,29 @@
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/common/time.h>
 #include <pcl/common/common.h>
-
 //actions
 #include <actionlib/client/simple_action_client.h>
 #include "jaco_msgs/SetFingersPositionAction.h"
 #include "jaco_msgs/ArmPoseAction.h"
 #include "jaco_msgs/ArmJointAnglesAction.h"
-
 #include <pcl/kdtree/kdtree.h>
 #include <pcl_ros/impl/transforms.hpp>
-
 //including package services 
 #include "door_manipulation_demo/door_perception.h"
-
-
 #include <tf/transform_listener.h>
 #include <tf/tf.h>
-
 #include <moveit_msgs/DisplayRobotState.h>
 // Kinematics
 #include <moveit_msgs/GetPositionFK.h>
 #include <moveit_msgs/GetPositionIK.h>
-
 #include <moveit_utils/AngularVelCtrl.h>
 #include <moveit_utils/MicoMoveitJointPose.h>
 #include <moveit_utils/MicoMoveitCartesianPose.h>
 //#include <controller_manager.h>
-
 #include <geometry_msgs/TwistStamped.h>
 #include <std_msgs/Header.h>
 #include <time.h>
 #include <stdint.h>
-
 #include <segbot_arm_manipulation/arm_utils.h>
 #include <segbot_arm_manipulation/grasp_utils.h>
 #include "agile_grasp/Grasps.h"
@@ -215,18 +197,15 @@ int main (int argc, char** argv)
     first_goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_picked", 1);
     second_goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_to_go_2", 1);
     ros::ServiceClient client = n.serviceClient<door_manipulation_demo::door_perception>("/door_handle_detection/door_perception");
-    
     signal(SIGINT, sig_handler);
-    
     
     //get arm position
     segbot_arm_manipulation::closeHand();
-
     //set goal for mico service
     door_manipulation_demo::door_perception door_srv;
     moveit_utils::MicoMoveitCartesianPose mico_srv;
     mico_srv.request.target = first_goal;
-    
+    //home arm and move it to the start position
     segbot_arm_manipulation::homeArm(n);
     ros::spinOnce();
     segbot_arm_manipulation::moveToPoseMoveIt(n,start_pose);
@@ -284,9 +263,7 @@ int main (int argc, char** argv)
 
     //here, we'll store all the oush options that pass the filters
     std::vector<geometry_msgs::PoseStamped> push_commands;
-        
     for (unsigned int i = 0; i < poses_msg_first.poses.size(); i++){
-                
         geometry_msgs::PoseStamped temp_first_goal; 
         temp_first_goal.header = poses_msg_first.header;
         temp_first_goal.pose = poses_msg_first.poses.at(i);
@@ -317,9 +294,7 @@ int main (int argc, char** argv)
                     }
                 }   
             }
-                        
         }
-                
     }
                 
     //check to see if all potential grasps have been filtered out
@@ -346,24 +321,16 @@ int main (int argc, char** argv)
                 
                     
     if (selected_push_index == -1 || selected_push_index > push_commands.size()){
-        ROS_WARN("selection failed. kill.");
-            
+        ROS_WARN("selection failed. kill.");            
     } else {
 
         pressEnter();
         ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
         first_goal_pub.publish(first_goal);
-
-        
-        
         //made vision calls check in rviz to see if correct then procede
         pressEnter();
-        
         ROS_INFO("Demo starting...Move the arm to a 'ready' position .");
-        
         ros::spinOnce();
-        
-        
         pressEnter();
         ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
         segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
@@ -382,11 +349,9 @@ int main (int argc, char** argv)
         } else{ 
             while( changex1 < 15 && !isReachable){
                 second_goal.pose.position.z -= .01;
-                
                 while( changey1 < 15 && !isReachable){
                     second_goal.pose.position.y += .01;
                     moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
-                    
                     if(ik_response_approach.error_code.val == 1){
                         ROS_INFO("entered second pose passed");
                         second_goal_pub.publish(second_goal);
@@ -407,18 +372,13 @@ int main (int argc, char** argv)
         
         ros::Rate r(rateHertz);
         for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++) {
-            
             velocityMsg.twist.linear.x = 1.25;
             velocityMsg.twist.linear.y = 0.1;
             velocityMsg.twist.linear.z = 0.1;
-            
             velocityMsg.twist.angular.x = 0.0;
             velocityMsg.twist.angular.y = 0.0;
             velocityMsg.twist.angular.z = 0.0;
-            
-            
             pub_velocity.publish(velocityMsg);
-            
             r.sleep();
         }   
         //fail safe if talking directly to driver failed
@@ -429,7 +389,6 @@ int main (int argc, char** argv)
         segbot_arm_manipulation::moveToPoseMoveIt(n,second_goal);
         ros::spinOnce();  
         pressEnter();
-        
         //return back to home position
         ROS_INFO("Demo ending...arm will move back 'ready' position .");
         segbot_arm_manipulation::homeArm(n);
@@ -438,11 +397,9 @@ int main (int argc, char** argv)
         //do a vision call to see if the dorr has moved
         if(client.call(door_srv)){
             ros::spinOnce();
-
         } else {
                 ROS_INFO("didn't enter vision");
         }
-        
         //check if door has moved and sent response of the action
         if(similar(orig_plane_coeff.x, plane_coeff.x) && similar(orig_plane_coeff.y, plane_coeff.y) && similar(orig_plane_coeff.z, plane_coeff.z)
             && similar(orig_plane_coeff.w, plane_coeff.w)){
