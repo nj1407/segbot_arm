@@ -104,6 +104,7 @@ ros::Publisher goal_pub;
 ros::Publisher cloud_pub;
 ros::Publisher elevator_cloud_pub;
 ros::Publisher debug_pub;
+ros::Publisher plane_coeff_pub;
 ros::Publisher goal_pub_lower;
 PointCloudT::Ptr cloud_costmap (new PointCloudT);
 
@@ -299,6 +300,54 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     vg.setInputCloud (cloud_filtered);
     vg.setLeafSize (0.0025f, 0.0025f, 0.0025f);
     vg.filter (*filtered);
+    
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients ());
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices ());
+    // Create the segmentation object
+    pcl::SACSegmentation<PointT> seg;
+    // Optional
+    seg.setOptimizeCoefficients (true);
+    // Mandatory
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setMaxIterations (1000);
+    seg.setDistanceThreshold (0.01);
+
+    // Create the filtering object
+    pcl::ExtractIndices<PointT> extract;
+
+    // Segment the largest planar component from the remaining cloud
+    seg.setInputCloud (cloud_filtered);
+    seg.segment (*inliers, *coefficients);
+
+    // Extract the plane
+    extract.setInputCloud (cloud_filtered);
+    extract.setIndices (inliers);
+    extract.setNegative (false);
+    extract.filter (*cloud_plane);
+
+    //extract everything else
+    extract.setNegative (true);
+    extract.filter (*cloud_blobs);
+
+
+    ROS_INFO("passed first filter");
+    
+    //get the plane coefficients
+    Eigen::Vector4f plane_coefficients;
+    
+    plane_coefficients(0)=coefficients->values[0];
+    plane_coefficients(1)=coefficients->values[1];
+    plane_coefficients(2)=coefficients->values[2];
+    plane_coefficients(3)=coefficients->values[3];
+    
+    ROS_INFO("Planar coefficients: %f, %f, %f, %f",
+        plane_coefficients(0),plane_coefficients(1),plane_coefficients(2),  plane_coefficients(3));
+    plane_coeff.x = plane_coefficients(0);
+    plane_coeff.y = plane_coefficients(1);
+    plane_coeff.z = plane_coefficients(2);
+    plane_coeff.w = plane_coefficients(3);
+    plane_coeff_pub.publish(plane_coefficients);
     
     ROS_INFO("before clustering");  
     // Create the filtering object
