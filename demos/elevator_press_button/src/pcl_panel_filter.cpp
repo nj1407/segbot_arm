@@ -347,7 +347,7 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     plane_coeff.y = plane_coefficients(1);
     plane_coeff.z = plane_coefficients(2);
     plane_coeff.w = plane_coefficients(3);
-    plane_coeff_pub.publish(plane_coefficients);
+    plane_coeff_pub.publish(plane_coeff);
     
     ROS_INFO("before clustering");  
     // Create the filtering object
