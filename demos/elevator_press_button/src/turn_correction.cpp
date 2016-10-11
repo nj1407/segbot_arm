@@ -76,97 +76,57 @@ typedef pcl::PointCloud<PointT> PointCloudT;
 
 //any table further than this away from the sensor will not be seen (in m)
 #define FILTER_Z_VALUE 1.5
-
-
-class TableApproachActionServer
-{
-protected:
-    
-    ros::NodeHandle nh_;
-    // NodeHandle instance must be created before this line. Otherwise strange error may occur.
-    actionlib::SimpleActionServer<segbot_arm_manipulation::TabletopApproachAction> as_; 
-    std::string action_name_;
-    
-    
-    
-    nav_msgs::Odometry current_odom;
-    bool heard_odom;
-    
-    ros::Publisher pub_base_velocity;
-    ros::Publisher pose_pub;
-    ros::Publisher sound_pub;
-
-    //used to compute transforms
-    tf::TransformListener tf_listener;
-    
-    segbot_arm_manipulation::TabletopApproachResult result_;
-    
-    ros::Subscriber sub_odom_;
-    
-    //holds set of predefined positions
-    ArmPositionDB *posDB;
-    
-public:
-
-  TableApproachActionServer(std::string name) :
-    as_(nh_, name, boost::bind(&TableApproachActionServer::executeCB, this, _1), false),
-    action_name_(name)
-  {
-
-    
-    //subscribe to odometry 
-    sub_odom_= nh_.subscribe("/odom", 1,&TableApproachActionServer::odom_cb,this);
-
-    //publisher for debugging purposes
-    pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
-    
-    //used to publish sound requests
-    sound_pub = nh_.advertise<sound_play::SoundRequest>("/robotsound", 1);
-    
-    //velocity publisher
-    pub_base_velocity = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-    
-    //load database of joint- and tool-space positions
-    std::string j_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/jointspace_position_db.txt";
-    std::string c_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/toolspace_position_db.txt";
-    
-    posDB = new ArmPositionDB(j_pos_filename, c_pos_filename);
-    
-    as_.start();
-  }
-
-  ~TableApproachActionServer(void)
-  {
-  }
   
-    //odom state cb
-    void odom_cb(const nav_msgs::OdometryConstPtr& input){
-        current_odom = *input;
-        heard_odom = true;
-    }
+ros::NodeHandle nh_;
+// NodeHandle instance must be created before this line. Otherwise strange error may occur.
 
-    void spinSleep(double duration){
-        int rateHertz = 40; 
-        ros::Rate r(rateHertz);
-        for(int i = 0; i < (int)duration * rateHertz; i++) {
-            ros::spinOnce();
-            r.sleep();
-        }
-    }
+std::string action_name_;
     
-        
-    double getYaw(geometry_msgs::Pose pose){
-        tf::Quaternion q(pose.orientation.x, 
-                                pose.orientation.y, 
-                                pose.orientation.z, 
-                                pose.orientation.w);
-        tf::Matrix3x3 m(q);
-        
-        double r, p, y;
-        m.getRPY(r, p, y);
-        return y;
-    }
     
+    
+nav_msgs::Odometry current_odom;
+bool heard_odom;
+
+ros::Publisher pub_base_velocity;
+ros::Publisher pose_pub;
+ros::Publisher sound_pub;
+
+//used to compute transforms
+tf::TransformListener tf_listener;
+
+ros::Subscriber sub_odom_;
+
+//holds set of predefined positions
+ArmPositionDB *posDB;
+
+//odom state cb
+void odom_cb(const nav_msgs::OdometryConstPtr& input){
+    current_odom = *input;
+    heard_odom = true;
+}
+
+void spinSleep(double duration){
+    int rateHertz = 40; 
+    ros::Rate r(rateHertz);
+    for(int i = 0; i < (int)duration * rateHertz; i++) {
+        ros::spinOnce();
+        r.sleep();
+    }
+}
+
+    
+double getYaw(geometry_msgs::Pose pose){
+    tf::Quaternion q(pose.orientation.x, 
+                            pose.orientation.y, 
+                            pose.orientation.z, 
+                            pose.orientation.w);
+    tf::Matrix3x3 m(q);
+    
+    double r, p, y;
+    m.getRPY(r, p, y);
+    return y;
+}
+
     void executeCB(const segbot_arm_manipulation::TabletopApproachGoalConstPtr &goal)
     {
         if (goal->command == "approach"){
@@ -321,12 +281,48 @@ public:
 };
 
 
-int main(int argc, char** argv)
-{
-  ros::init(argc, argv, "segbot_table_approach_as");
+int main (int argc, char** argv){
+    //tf mico_link_base
+    // Initialize ROS
+    ros::init (argc, argv, "turn_correction");
+    ros::NodeHandle n;
+    
+    // Create a ROS subscriber for the input point cloud
+    std::string param_topic = "/xtion_camera/depth_registered/points";
+    ros::Subscriber sub = n.subscribe (param_topic, 1, cloud_cb);
+    
+    //create subscriber to joint angles
+    ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
+      //subscribe to odometry 
+    sub_odom_= nh_.subscribe("/odom", 1,&TableApproachActionServer::odom_cb,this);
 
-  TableApproachActionServer as(ros::this_node::getName());
-  ros::spin();
+     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
 
-  return 0;
-}
+    //publisher for debugging purposes
+    pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
+    
+    //used to publish sound requests
+    sound_pub = nh_.advertise<sound_play::SoundRequest>("/robotsound", 1);
+    
+    //velocity publisher
+    pub_base_velocity = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+    
+    //load database of joint- and tool-space positions
+    std::string j_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/jointspace_position_db.txt";
+    std::string c_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/toolspace_position_db.txt";
+    
+    posDB = new ArmPositionDB(j_pos_filename, c_pos_filename);
+    //service
+    ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", seg_cb);
+    //refresh rate
+    double ros_rate = 3.0;
+    ros::Rate r(ros_rate);
+    
+    // Main loop:
+    while (!g_caught_sigint && ros::ok()){  
+        //collect messages
+        ros::spinOnce();
+        r.sleep();
+    }
+
+};

@@ -445,6 +445,7 @@ int main (int argc, char** argv){
     elevator_cloud_pub = n.advertise<sensor_msgs::PointCloud2>("elevator_detector/plane_cloud", 1);
     goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_to_go", 1);
     goal_pub_lower = n.advertise<geometry_msgs::PoseStamped>("goal_to_go_two", 1);
+    plane_coeff_pub = n.advertise<geometry_msgs::Quaternion>("plane_coefficents", 1);
     //service
     ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", seg_cb);
     //refresh rate
