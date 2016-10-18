@@ -19,7 +19,6 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(PCL 1.2 REQUIRED)
-
  add_service_files(
    FILES
    door_perception.srv

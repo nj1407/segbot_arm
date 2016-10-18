@@ -52,6 +52,7 @@
 #include <stdint.h>
 #include <segbot_arm_manipulation/arm_utils.h>
 #include <segbot_arm_manipulation/grasp_utils.h>
+#include <segbot_arm_manipulation/arm_positions_db.h>
 #include <agile_grasp/Grasps.h>
 #include <door_manipulation_demo/PushDoorAction.h>
 #include <actionlib/server/simple_action_server.h>
@@ -67,14 +68,15 @@ Eigen::Vector4f centroid;
 geometry_msgs::PoseStamped start_pose;
 geometry_msgs::PoseStamped first_goal;
 geometry_msgs::PoseStamped second_goal;
-
-sensor_msgs::JointState joint_state_outofview;
-sensor_msgs::JointState current_state;
 geometry_msgs::PoseStamped current_pose;
 geometry_msgs::Quaternion plane_coeff;
 geometry_msgs::Quaternion orig_plane_coeff;
 
+ArmPositionDB *posDB;
 agile_grasp::Grasps current_grasps;
+sensor_msgs::JointState joint_state_outofview;
+sensor_msgs::JointState current_state;
+
 bool heardPose = false;
 bool heardJoinstState = false;
 bool heardGoal = false;
@@ -96,8 +98,6 @@ void sig_handler(int sig)
 //register move it inverse kinematics solver
 moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs::PoseStamped p){
     ros::ServiceClient ikine_client = n.serviceClient<moveit_msgs::GetPositionIK> ("/compute_ik");
-    
-    
     moveit_msgs::GetPositionIK::Request ikine_request;
     moveit_msgs::GetPositionIK::Response ikine_response;
     ikine_request.ik_request.group_name = "arm";
@@ -115,7 +115,6 @@ moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs:
 
 //get the current joint state of the arm
 void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
-    
     if (input->position.size() == NUM_JOINTS){
         current_state = *input;
         heardJoinstState = true;
@@ -134,10 +133,8 @@ void listenForArmData(float rate){
     heardPose = false;
     heardJoinstState = false;
     ros::Rate r(rate);
-    
     while (ros::ok()){
         ros::spinOnce();
-        
         if (heardPose && heardJoinstState){
             return;
         }
@@ -156,16 +153,13 @@ void goal_cb (const geometry_msgs::PoseStampedConstPtr& input)
     second_goal.pose = input->pose;
     second_goal.pose.position.x += .15;
     heardGoal = true;
-        
 }
 
 //figure out where the robot
 void toolpos_cb (const geometry_msgs::PoseStampedConstPtr& input)
 {
-    
     current_pose.header = input->header;
     current_pose.pose = input->pose;
-        
 }
 
 //get the plane coefficents to check if door has moved 
@@ -176,13 +170,9 @@ void plane_coeff_cb (const geometry_msgs::QuaternionConstPtr& input){
 class PushDoorActionServer
 {
 protected:
-
     ros::NodeHandle nh_;
-    
     actionlib::SimpleActionServer<door_manipulation_demo::PushDoorAction> as_; 
-    
     std::string action_name_;
-    
     door_manipulation_demo::PushDoorFeedback feedback_;
     door_manipulation_demo::PushDoorResult result_;
     ros::Subscriber sub_angles;
@@ -229,7 +219,6 @@ protected:
     //declaring move it inverse kinmatics server
     moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs::PoseStamped p){
         ros::ServiceClient ikine_client = n.serviceClient<moveit_msgs::GetPositionIK> ("/compute_ik");
-      
         moveit_msgs::GetPositionIK::Request ikine_request;
         moveit_msgs::GetPositionIK::Response ikine_response;
         ikine_request.ik_request.group_name = "arm";
@@ -245,23 +234,12 @@ protected:
         return ikine_response;
     }
 
-
     void executeCB(const door_manipulation_demo::PushDoorGoalConstPtr  &goal){
-        //tested to be you of way of xtion camera for starting pose
-        start_pose.header.frame_id = "mico_link_base";
-        start_pose.pose.position.x = 0.14826361835;
-        start_pose.pose.position.y = -0.323001801968;
-        start_pose.pose.position.z = 0.233884751797;
-        start_pose.pose.orientation.x = 0.49040481699;
-        start_pose.pose.orientation.y = 0.468191160046;
-        start_pose.pose.orientation.z = 0.461722946003;
-        start_pose.pose.orientation.w = 0.571937124396;
-        
+        //get goals to move to
         first_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("goal_picked", 1);
         second_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("goal_to_go_2", 1);
         signal(SIGINT, sig_handler);
         
-        //get arm position
         segbot_arm_manipulation::closeHand();
         //set goal for mico service
         door_manipulation_demo::door_perception door_srv;
@@ -269,12 +247,17 @@ protected:
         mico_srv.request.target = first_goal;
         //home arm and move it to the start pose out of xtion vision
         segbot_arm_manipulation::homeArm(nh_);
-        ros::spinOnce();
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,start_pose);
-        ros::spinOnce();
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,start_pose);
-        ros::spinOnce();
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,start_pose);
+         //move arm out of camera space to see the door
+        if (posDB->hasCarteseanPosition("side_view")){
+            ROS_INFO("Moving out of the way...");
+            geometry_msgs::PoseStamped out_of_view_pose = posDB->getToolPositionStamped("side_view","/mico_link_base");
+            //now go to the pose
+            segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
+            segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
+        }
+        else {
+            ROS_ERROR("[segbot_table_approach_as.cpp] Cannot move arm out of view!");
+        }
         ros::spinOnce();
         //make calls to get vision
         if(client.call(door_srv)){
@@ -325,7 +308,6 @@ protected:
             }   
             changez++;
         }
-        
         //here, we'll store all the push options that pass the filters
         std::vector<geometry_msgs::PoseStamped> push_commands;
         for (unsigned int i = 0; i < poses_msg_first.poses.size(); i++){
@@ -347,7 +329,6 @@ protected:
                         for (int p = 0; p < D.size(); p++){
                             sum_d += D[p];
                         }
-                            
                         if (sum_d < ANGULAR_DIFF_THRESHOLD && sum_d > 1){
                             //now check to see how close the two sets of joint angles are -- if the joint configurations for the approach and grasp poses differ by too much, the grasp will not be accepted
                             ROS_INFO("Sum diff: %f",sum_d);
@@ -359,7 +340,6 @@ protected:
                 }
             }
         }
-        
         //check to see if all potential grasps have been filtered out
         if (push_commands.size() == 0){
             ROS_INFO("No feasible poses found demo done.");
@@ -377,7 +357,6 @@ protected:
                     ROS_INFO("picked orientation");
                 }
             }
-                            
             if (selected_push_index == -1 || selected_push_index > push_commands.size()){
                 ROS_WARN("selection failed. kill.");
                 //as_.setAborted(result_);
@@ -482,11 +461,8 @@ protected:
 };
 int main (int argc, char** argv)
 {
-    
   ros::init(argc, argv, "door_open_as");
-
   PushDoorActionServer as(ros::this_node::getName());
   ros::spin();
-
   return 0;
 };

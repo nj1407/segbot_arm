@@ -53,6 +53,7 @@
 #include <stdint.h>
 #include <segbot_arm_manipulation/arm_utils.h>
 #include <segbot_arm_manipulation/grasp_utils.h>
+#include <segbot_arm_manipulation/arm_positions_db.h>
 #include "agile_grasp/Grasps.h"
 
 #define NUM_JOINTS 8
@@ -65,14 +66,15 @@ Eigen::Vector4f centroid;
 geometry_msgs::PoseStamped start_pose;
 geometry_msgs::PoseStamped first_goal;
 geometry_msgs::PoseStamped second_goal;
-
-sensor_msgs::JointState joint_state_outofview;
-sensor_msgs::JointState current_state;
 geometry_msgs::PoseStamped current_pose;
 geometry_msgs::Quaternion plane_coeff;
 geometry_msgs::Quaternion orig_plane_coeff;
 
+ArmPositionDB *posDB;
 agile_grasp::Grasps current_grasps;
+sensor_msgs::JointState joint_state_outofview;
+sensor_msgs::JointState current_state;
+
 bool heardPose = false;
 bool heardJoinstState = false;
 bool heardGoal = false;
@@ -179,20 +181,10 @@ void plane_coeff_cb (const geometry_msgs::QuaternionConstPtr& input){
 
 int main (int argc, char** argv)
 {
-    
     // Initialize ROS
     ros::init (argc, argv, "segbot_arm_door_open_detector");
     ros::NodeHandle n;
     tf::TransformListener listener;
-    //tested to be you of way of xtion camera for starting pose
-    start_pose.header.frame_id = "mico_link_base";
-    start_pose.pose.position.x = 0.14826361835;
-    start_pose.pose.position.y = -0.323001801968;
-    start_pose.pose.position.z = 0.233884751797;
-    start_pose.pose.orientation.x = 0.49040481699;
-    start_pose.pose.orientation.y = 0.468191160046;
-    start_pose.pose.orientation.z = 0.461722946003;
-    start_pose.pose.orientation.w = 0.571937124396;
     
     first_goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_picked", 1);
     second_goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_to_go_2", 1);
@@ -208,11 +200,17 @@ int main (int argc, char** argv)
     //home arm and move it to the start position
     segbot_arm_manipulation::homeArm(n);
     ros::spinOnce();
-    segbot_arm_manipulation::moveToPoseMoveIt(n,start_pose);
-    ros::spinOnce();
-    segbot_arm_manipulation::moveToPoseMoveIt(n,start_pose);
-    ros::spinOnce();
-    segbot_arm_manipulation::moveToPoseMoveIt(n,start_pose);
+    //move arm out of camera space to see the door
+    if (posDB->hasCarteseanPosition("side_view")){
+        ROS_INFO("Moving out of the way...");
+        geometry_msgs::PoseStamped out_of_view_pose = posDB->getToolPositionStamped("side_view","/mico_link_base");
+        //now go to the pose
+        segbot_arm_manipulation::moveToPoseMoveIt(n,out_of_view_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(n,out_of_view_pose);
+    }
+    else {
+        ROS_ERROR("[segbot_table_approach_as.cpp] Cannot move arm out of view!");
+    }
     ros::spinOnce();
     //make calls to get vision
     if(client.call(door_srv)){
@@ -260,7 +258,6 @@ int main (int argc, char** argv)
         }   
         changez++;
     }
-
     //here, we'll store all the oush options that pass the filters
     std::vector<geometry_msgs::PoseStamped> push_commands;
     for (unsigned int i = 0; i < poses_msg_first.poses.size(); i++){
@@ -278,12 +275,10 @@ int main (int argc, char** argv)
                 moveit_msgs::GetPositionIK::Response  ik_response_approach = segbot_arm_manipulation::computeIK(n,temp_second_goal);
                 if (ik_response_approach.error_code.val == 1){
                     std::vector<double> D = segbot_arm_manipulation::getJointAngleDifferences(current_state, ik_response_approach.solution.joint_state);
-                    
                     double sum_d = 0;
                     for (int p = 0; p < D.size(); p++){
                         sum_d += D[p];
                     }
-                            
                     if (sum_d < ANGULAR_DIFF_THRESHOLD && sum_d > 1){
                         //now check to see how close the two sets of joint angles are -- if the joint configurations for the approach and grasp poses differ by too much, the grasp will not be accepted
                         ROS_INFO("Sum diff: %f",sum_d);
@@ -302,10 +297,7 @@ int main (int argc, char** argv)
         ROS_INFO("No feasible poses found demo done.");
 
     } else{
-                
-    
         int selected_push_index = -1;
-        
         //find the grasp with closest orientatino to current pose
         double min_diff = 1000000.0;
         for (unsigned int i = 0; i < push_commands.size(); i++){
@@ -318,12 +310,9 @@ int main (int argc, char** argv)
                 ROS_INFO("picked orientation");
             }
         }
-                
-                    
     if (selected_push_index == -1 || selected_push_index > push_commands.size()){
         ROS_WARN("selection failed. kill.");            
     } else {
-
         pressEnter();
         ROS_INFO("goal picked...check if pose is what you want in rviz if not ctr c.");
         first_goal_pub.publish(first_goal);
@@ -357,7 +346,6 @@ int main (int argc, char** argv)
                         second_goal_pub.publish(second_goal);
                         isReachable = true;
                     }   
-                    
                     changey1 ++;
                 }   
                 changex1 ++;
@@ -393,7 +381,6 @@ int main (int argc, char** argv)
         ROS_INFO("Demo ending...arm will move back 'ready' position .");
         segbot_arm_manipulation::homeArm(n);
         segbot_arm_manipulation::homeArm(n);
-        
         //do a vision call to see if the dorr has moved
         if(client.call(door_srv)){
             ros::spinOnce();

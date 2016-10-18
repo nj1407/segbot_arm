@@ -125,20 +125,13 @@ void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
 
 void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
 {
-
-    
         cloud_mutex.lock ();
-
         //convert to PCL format
         pcl::fromROSMsg (*input, *cloud);
-
         //state that a new cloud is available
         new_cloud_available_flag = true;
-
-        cloud_mutex.unlock ();
-    
+         cloud_mutex.unlock ();
 }
-
 
 bool filter(PointCloudT::Ptr blob, Eigen::Vector4f plane_coefficients, double tolerance_min, double tolerance_max){
     
@@ -158,32 +151,26 @@ bool filter(PointCloudT::Ptr blob, Eigen::Vector4f plane_coefficients, double to
             min_distance = distance;
         }
         
-        if (distance > max_distance)
+        if (distance > max_distance){
             max_distance = distance;
-        
-        
-        
+        }
     }
     
-    
-    if (min_distance > tolerance_min)
+    if (min_distance > tolerance_min){
         return false;
-    else if (max_distance < 0.8*tolerance_max)
+    }
+    else if (max_distance < 0.8*tolerance_max){
         return false;   
-    
+    }
     
     ROS_INFO("\nMin Distance to plane for cluster with %i points: %f",(int)blob->points.size(),min_distance);
     ROS_INFO("Max Distance to plane for cluster with %i points: %f",(int)blob->points.size(),max_distance);
-
-    
     return true;
-    
 }
 
 void computeClusters(PointCloudT::Ptr in, double tolerance){
     pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
     tree->setInputCloud (in);
-
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<PointT> ec;
     ec.setClusterTolerance (tolerance); // 2cm
@@ -193,9 +180,8 @@ void computeClusters(PointCloudT::Ptr in, double tolerance){
     ec.setSearchMethod (tree);
     ec.setInputCloud (in);
     ec.extract (cluster_indices);
-
     clusters.clear();
-
+    
     int j = 0;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
     {
@@ -212,44 +198,31 @@ void computeClusters(PointCloudT::Ptr in, double tolerance){
 
 void waitForCloud(){
     ros::Rate r(30);
-    
     collecting_cloud = true;
-    
     while (ros::ok()){
         ros::spinOnce();
-        
         r.sleep();
-        
         if (new_cloud_available_flag){
             new_cloud_available_flag = false;
             break;
         }
     }
-    
     collecting_cloud = false;
 }
 
 /* collects a cloud by aggregating k successive frames */
 void waitForCloudK(int k){
     ros::Rate r(30);
-    
     cloud_aggregated->clear();
-    
     int counter = 0;
     collecting_cloud = true;
     while (ros::ok()){
         ros::spinOnce();
-        
         r.sleep();
-        
         if (new_cloud_available_flag){
-            
             *cloud_aggregated+=*cloud;
-            
             new_cloud_available_flag = false;
-            
             counter ++;
-            
             if (counter >= k){
                 cloud_aggregated->header = cloud->header;
                 break;
@@ -299,27 +272,19 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
 
     // Create the filtering object
     pcl::ExtractIndices<PointT> extract;
-
     // Segment the largest planar component from the remaining cloud
     seg.setInputCloud (cloud_filtered);
     seg.segment (*inliers, *coefficients);
-
     // Extract the plane
     extract.setInputCloud (cloud_filtered);
     extract.setIndices (inliers);
     extract.setNegative (false);
     extract.filter (*cloud_plane);
-
     //extract everything else
     extract.setNegative (true);
     extract.filter (*cloud_blobs);
-
-
-    ROS_INFO("passed first filter");
-    
     //get the plane coefficients
     Eigen::Vector4f plane_coefficients;
-    
     plane_coefficients(0)=coefficients->values[0];
     plane_coefficients(1)=coefficients->values[1];
     plane_coefficients(2)=coefficients->values[2];
@@ -332,36 +297,26 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
     plane_coeff.z = plane_coefficients(2);
     plane_coeff.w = plane_coefficients(3);
     plane_coeff_pub.publish(plane_coeff);
-
     
     bool plane_is_not_vertical = plane_coefficients(1) > -.5 && plane_coefficients(3) > 0;
-
     //Step 3: Eucledian Cluster Extraction
     computeClusters(cloud_blobs,cluster_extraction_tolerance);
-    
     ROS_INFO("Found %i clusters eucldian.",(int)clusters.size());
-
-    
     clusters_on_plane.clear();
-
     for (unsigned int i = 0; i < clusters.size(); i++){
-        
         if (filter(clusters.at(i),plane_coefficients,plane_distance_tolerance,plane_max_distance_tolerance)){
             clusters_on_plane.push_back(clusters.at(i));
         }
     }
     
     ROS_INFO("Found %i clusters on the plane after restrains.",(int)clusters_on_plane.size());
-    
     //fill in response
-    
     //plane cloud and coefficient
     pcl::toROSMsg(*cloud_plane,res.cloud_plane);
     res.cloud_plane.header.frame_id = cloud->header.frame_id;
     for (int i = 0; i < 4; i ++){
         res.cloud_plane_coef[i] = plane_coefficients(i);
     }
-    
     //check if valid information
     if(clusters_on_plane.size() < 1 ){
         ROS_INFO("Found 0 clusters or plane isn't vertical did not continue");  
@@ -373,7 +328,6 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
         //TO DO: this may not always be the case
         res.is_plane_found = true;
         ROS_INFO("passed second filer");
-        
         //for debugging purposes
         //now, put the clouds in cluster_on_plane in one cloud and publish it
         cloud_blobs->clear();
@@ -383,12 +337,10 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
     }
     
     //To::DO figure out values of 180
-    
     ROS_INFO("Publishing debug cloud...");
     //get centroid and move it up .1 m 
     //used to get goal xyz
     pcl::compute3DCentroid(*cloud_blobs,centroid);
-    
     //get pose
     geometry_msgs::PoseStamped goal;
     goal.pose.position.x = centroid.x();
@@ -397,26 +349,19 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
     //get it flat (180 degress)
     goal.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0);
     goal.header.frame_id = cloud_ros.header.frame_id;
-    
-    
     //mext transform pose into arm frame of reference and set orientation
     try{
         listener.waitForTransform(cloud_ros.header.frame_id,  "mico_link_origin",  ros::Time(0), ros::Duration(5.0) );
         listener.transformPose("mico_api_origin", goal, goal);
-        
     }
     catch (tf::TransformException ex){
         ROS_ERROR("%s",ex.what());
         ros::Duration(1.0).sleep();
     }
-    
     //set orientation after transforming into arm frame of reference
     goal.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(1.54,0,1.54);
-    
-    
     //publish the two goals to get it to push the goor
     goal_pub.publish(goal);
-        
     return true;
 }
 
@@ -433,12 +378,9 @@ int main (int argc, char** argv)
     //create subscriber to joint angles
     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
     
-    
     //debugging publisher
     cloud_pub = n.advertise<sensor_msgs::PointCloud2>("door_handle_detection/cloud", 1);
-    
     door_cloud_pub = n.advertise<sensor_msgs::PointCloud2>("door_handle_detection/plane_cloud", 1);
-    
     plane_coeff_pub = n.advertise<geometry_msgs::Quaternion>("plane_coeff", 1);
     
     //service
@@ -451,16 +393,10 @@ int main (int argc, char** argv)
     //refresh rate
     double ros_rate = 3.0;
     ros::Rate r(ros_rate);
-
     while (!g_caught_sigint && ros::ok())
     {
-           
         //collect messages
         ros::spinOnce();
         r.sleep();
-
     }
-    
-
-    
 };
