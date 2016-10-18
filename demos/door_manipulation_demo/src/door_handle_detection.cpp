@@ -101,14 +101,13 @@ double cluster_extraction_tolerance = 0.05;
 bool collecting_cloud = false;
 
 // Check if a file exist or not
-bool file_exist(std::string& name) {
+bool file_exist(std::string& name){
     struct stat buffer;
     return (stat (name.c_str(), &buffer) == 0);
 }
 
 /* what happens when ctr-c is pressed */
-void sig_handler(int sig)
-{
+void sig_handler(int sig){
   g_caught_sigint = true;
   ROS_INFO("caught sigint, init shutdown sequence...");
   ros::shutdown();
@@ -116,15 +115,13 @@ void sig_handler(int sig)
 };
 
 // used to get current state to see if door has moved
-void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
+void joint_state_cb (const sensor_msgs::JointStateConstPtr& input){
     //NUM JOINTS IS 8
-    if (input->position.size() == 8){
+    if (input->position.size() == 8)
         current_state = *input;
-    }
 }
 
-void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
-{
+void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input){
         cloud_mutex.lock ();
         //convert to PCL format
         pcl::fromROSMsg (*input, *cloud);
@@ -147,15 +144,13 @@ bool filter(PointCloudT::Ptr blob, Eigen::Vector4f plane_coefficients, double to
 
         double distance = pcl::pointToPlaneDistance(p_i, plane_coefficients);
         
-        if (distance < min_distance){
+        if (distance < min_distance)
             min_distance = distance;
-        }
         
-        if (distance > max_distance){
+        if (distance > max_distance)
             max_distance = distance;
-        }
+        
     }
-    
     if (min_distance > tolerance_min){
         return false;
     }
@@ -183,8 +178,7 @@ void computeClusters(PointCloudT::Ptr in, double tolerance){
     clusters.clear();
     
     int j = 0;
-    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
-    {
+    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
         PointCloudT::Ptr cloud_cluster (new PointCloudT);
         for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
             cloud_cluster->points.push_back (in->points[*pit]); //*
@@ -232,8 +226,7 @@ void waitForCloudK(int k){
     collecting_cloud = false;
 }
 
-bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipulation_demo::door_perception::Response &res)
-{
+bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipulation_demo::door_perception::Response &res){
     //listener for transforrms
     tf::TransformListener listener;
     
@@ -365,8 +358,7 @@ bool seg_cb(door_manipulation_demo::door_perception::Request &req, door_manipula
     return true;
 }
 
-int main (int argc, char** argv)
-{
+int main (int argc, char** argv){
     // Initialize ROS
     ros::init (argc, argv, "segbot_arm_door_handle_detector");
     ros::NodeHandle n;
@@ -393,8 +385,7 @@ int main (int argc, char** argv)
     //refresh rate
     double ros_rate = 3.0;
     ros::Rate r(ros_rate);
-    while (!g_caught_sigint && ros::ok())
-    {
+    while (!g_caught_sigint && ros::ok()){
         //collect messages
         ros::spinOnce();
         r.sleep();

@@ -121,7 +121,7 @@ moveit_msgs::GetPositionIK::Response computeIK(ros::NodeHandle n, geometry_msgs:
 }
 
 //get the recorded topics
-void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
+void joint_state_cb (const sensor_msgs::JointStateConstPtr& input){
     
     if (input->position.size() == NUM_JOINTS){
         current_state = *input;
@@ -208,7 +208,7 @@ int main (int argc, char** argv)
         segbot_arm_manipulation::moveToPoseMoveIt(n,out_of_view_pose);
         segbot_arm_manipulation::moveToPoseMoveIt(n,out_of_view_pose);
     }
-    else {
+    else{
         ROS_ERROR("[segbot_table_approach_as.cpp] Cannot move arm out of view!");
     }
     ros::spinOnce();
@@ -216,7 +216,7 @@ int main (int argc, char** argv)
     if(client.call(door_srv)){
         ros::spinOnce();
         ROS_INFO("entered");
-    } else {
+    } else{
         ROS_INFO("didn't enter vision");
     }
     orig_plane_coeff = plane_coeff; 
@@ -332,10 +332,10 @@ int main (int argc, char** argv)
         //check if second goal is possible for back up if arm driver not in configuration not to move forward
         moveit_msgs::GetPositionIK::Response  ik_response_approach = computeIK(n,second_goal);
         if(ik_response_approach.error_code.val == 1){
-                    ROS_INFO("entered first pose passed");
-                    second_goal_pub.publish(second_goal);
-                    isReachable = true;
-        } else{ 
+            ROS_INFO("entered first pose passed");
+            second_goal_pub.publish(second_goal);
+            isReachable = true;
+        } else { 
             while( changex1 < 15 && !isReachable){
                 second_goal.pose.position.z -= .01;
                 while( changey1 < 15 && !isReachable){
@@ -359,7 +359,7 @@ int main (int argc, char** argv)
         geometry_msgs::TwistStamped velocityMsg;
         
         ros::Rate r(rateHertz);
-        for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++) {
+        for(int i = 0; i < (int)timeoutSeconds * rateHertz; i++){
             velocityMsg.twist.linear.x = 1.25;
             velocityMsg.twist.linear.y = 0.1;
             velocityMsg.twist.linear.z = 0.1;
@@ -385,7 +385,7 @@ int main (int argc, char** argv)
         if(client.call(door_srv)){
             ros::spinOnce();
         } else {
-                ROS_INFO("didn't enter vision");
+            ROS_INFO("didn't enter vision");
         }
         //check if door has moved and sent response of the action
         if(similar(orig_plane_coeff.x, plane_coeff.x) && similar(orig_plane_coeff.y, plane_coeff.y) && similar(orig_plane_coeff.z, plane_coeff.z)
@@ -394,7 +394,6 @@ int main (int argc, char** argv)
         } else {
                 ROS_INFO("moved door");
         }   
-            
         }
     }       
                 
