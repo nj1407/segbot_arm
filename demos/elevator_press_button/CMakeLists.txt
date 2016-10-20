@@ -56,11 +56,15 @@ add_definitions(${PCL_DEFINITIONS})
 add_executable(pcl_panel_filter src/pcl_panel_filter.cpp)
 add_executable(press_button src/press_button.cpp)
 add_executable(see_button_opencv src/see_button_opencv.cpp)
+add_executable(turn_correction src/turn_correction.cpp)
 
 add_dependencies(pcl_panel_filter elevator_press_button_gencpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(press_button elevator_press_button_gencpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(see_button_opencv elevator_press_button_gencpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS${OpenCV_LIBRARIES}})
+add_dependencies(turn_correction elevator_press_button_gencpp ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 target_link_libraries(pcl_panel_filter ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
 target_link_libraries(press_button ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
+target_link_libraries(turn_correction ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES})
 target_link_libraries(see_button_opencv ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} )
+

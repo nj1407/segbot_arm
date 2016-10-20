@@ -79,9 +79,198 @@ typedef pcl::PointCloud<PointT> PointCloudT;
   
 ros::NodeHandle nh_;
 // NodeHandle instance must be created before this line. Otherwise strange error may occur.
-
-std::string action_name_;
     
+nav_msgs::Odometry current_odom;
+bool heard_odom;
+
+ros::Publisher pub_base_velocity;
+ros::Publisher pose_pub;
+ros::Publisher sound_pub;
+
+//used to compute transforms
+tf::TransformListener tf_listener;
+
+ros::Subscriber sub_odom_;
+
+//holds set of predefined positions
+ArmPositionDB *posDB;
+
+//odom state cb
+void odom_cb(const nav_msgs::OdometryConstPtr& input){
+    current_odom = *input;
+    heard_odom = true;
+}
+
+void spinSleep(double duration){
+    int rateHertz = 40; 
+    ros::Rate r(rateHertz);
+    for(int i = 0; i < (int)duration * rateHertz; i++) {
+        ros::spinOnce();
+        r.sleep();
+    }
+}
+
+    
+double getYaw(geometry_msgs::Pose pose){
+    tf::Quaternion q(pose.orientation.x, 
+                            pose.orientation.y, 
+                            pose.orientation.z, 
+                            pose.orientation.w);
+    tf::Matrix3x3 m(q);
+    
+    double r, p, y;
+    m.getRPY(r, p, y);
+    return y;
+}
+
+bool executeCB(elevator_press_button::color_perception::Request &req, elevator_press_button::color_perception::Response &res){
+        ros::ServiceClient client_panel = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
+        
+        if (client_panel.call())
+        {
+            ROS_INFO("Received Response");
+        }
+        else
+        {
+            ROS_ERROR("Failed to call perception service");
+            return false;
+        }
+        
+        Eigen::Vector4f plane_coef_vector;
+        for (int i = 0; i < 4; i ++)
+            plane_coef_vector(i)=srv.response.cloud_plane_coef[i];
+
+        //next, make arm safe to move again
+        bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
+        if (!safe) {
+            ROS_ERROR("[segbot_table_approach_as.cpp] Cannot make arm safe for travel! Aborting!");
+            return false;
+        }
+        
+        //transform clound into base_link frame of reference
+        sensor_msgs::PointCloud cloud_pc1;
+        sensor_msgs::convertPointCloud2ToPointCloud(srv.response.cloud_plane,cloud_pc1);
+        tf_listener.waitForTransform(srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
+        
+        sensor_msgs::PointCloud transformed_cloud;
+        tf_listener.transformPointCloud("/base_footprint",cloud_pc1,transformed_cloud); 
+                
+        //convert back to sensor_msgs::PointCloud2 and then to pcl format
+        sensor_msgs::PointCloud2 plane_cloud_pc2;
+        sensor_msgs::convertPointCloudToPointCloud2(transformed_cloud,plane_cloud_pc2);
+        
+        PointCloudT::Ptr cloud_plane (new PointCloudT);
+        pcl::fromROSMsg(plane_cloud_pc2, *cloud_plane);
+        
+        //find the point on the table closest to the robot's 0,0
+        int closest_point_index = -1;
+        double closest_point_distance = 0.0;
+        for (int i = 0; i < (int)cloud_plane->points.size(); i++){
+            double d_i = sqrt(   pow(cloud_plane->points.at(i).x,2) +   pow(cloud_plane->points.at(i).y,2));
+            if (closest_point_index == -1 || d_i < closest_point_distance){
+                closest_point_index = i;
+                closest_point_distance = d_i;
+            }
+        }
+        
+        geometry_msgs::PoseStamped pose_debug;
+        pose_debug.header.frame_id = "/base_footprint";
+        pose_debug.header.seq = 1;
+        pose_debug.pose.position.x = cloud_plane->points.at(closest_point_index).x;
+        pose_debug.pose.position.y = cloud_plane->points.at(closest_point_index).y;
+        pose_debug.pose.position.z = cloud_plane->points.at(closest_point_index).z;
+        pose_debug.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0);
+        pose_pub.publish(pose_debug);
+        
+        //calculate turn angle
+        double target_turn_angle = atan2( cloud_plane->points.at(closest_point_index).y, cloud_plane->points.at(closest_point_index).x);
+        
+        
+        double duration = 2.0; //we want to take this many seconds to get there
+        double pub_rate = 30;
+        
+        double turn_velocity = 0.5*target_turn_angle/duration;
+        
+        ros::Rate r(pub_rate);
+        
+        //first, wait for odometry
+        heard_odom = false;
+        while (!heard_odom){
+            r.sleep();
+            ros::spinOnce();
+        }
+        
+        double initial_yaw = getYaw(current_odom.pose.pose);
+        double target_yaw = initial_yaw + target_turn_angle;
+        
+        ROS_INFO("Turn angle = %f",target_turn_angle);
+        
+        
+        geometry_msgs::Twist v_i;
+        v_i.linear.x = 0; v_i.linear.y = 0; v_i.linear.z = 0;
+        v_i.angular.x = 0; v_i.angular.y = 0;
+        
+        //for (int i = 0; i < (int)duration*pub_rate;i++){
+        while (ros::ok()){
+            v_i.angular.z = turn_velocity;
+            //ROS_INFO_STREAM(v_i);
+            
+            pub_base_velocity.publish(v_i);
+            
+            ros::spinOnce();
+            
+            r.sleep();
+            
+            double current_yaw = getYaw(current_odom.pose.pose);
+            
+            if (fabs(current_yaw - target_yaw) < 0.05)
+                break;
+        }
+         
+        v_i.angular.z = 0;
+        pub_base_velocity.publish(v_i);
+        
+        heard_odom = false;
+        while (!heard_odom){
+            r.sleep();
+            ros::spinOnce();
+        }
+        double final_yaw = getYaw(current_odom.pose.pose);
+        
+       return true;
+}
+
+int main (int argc, char** argv){
+    //tf mico_link_base
+    // Initialize ROS
+    ros::init (argc, argv, "turn_correction");
+    ros::NodeHandle n;
+    
+    // Create a ROS subscriber for the input point cloud
+    std::string param_topic = "/xtion_camera/depth_registered/points";
+    ros::Subscriber sub = n.subscribe (param_topic, 1, cloud_cb);
+    
+    //create subscriber to joint angles
+    ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
+
+    //publisher for debugging purposes
+    pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
+    
+    //used to publish sound requests
+    sound_pub = nh_.advertise<sound_play::SoundRequest>("/robotsound", 1);
+    
+    //velocity publisher
+    pub_base_velocity = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+    
+    //load database of joint- and tool-space positions
+    std::string j_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/jointspace_position_db.txt";
+    std::string c_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/toolspace_position_db.txt";
+    
+    posDB = new ArmPositionDB(j_pos_filename, c_pos_filename);
+    //service
+    ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", seg_cb);
+    //refresh rate
+   
     
     
 nav_msgs::Odometry current_odom;
@@ -127,159 +316,6 @@ double getYaw(geometry_msgs::Pose pose){
     return y;
 }
 
-    void executeCB(const segbot_arm_manipulation::TabletopApproachGoalConstPtr &goal)
-    {
-        if (goal->command == "approach"){
-        
-            //step 1: query table_object_detection_node to segment the blobs on the table
-            posDB->print();
-            //first, we need to move the arm out of view so the camera can see the table
-            if (posDB->hasCarteseanPosition("side_view")){
-                geometry_msgs::PoseStamped out_of_view_pose = posDB->getToolPositionStamped("side_view","/mico_link_base");
-                
-                //now go to the pose
-                segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
-            }
-            else {
-                ROS_ERROR("[segbot_table_approach_as.cpp] Cannot move arm out of view!");
-            }
-                
-            
-             ros::ServiceClient client_panel = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
-            
-            if (client_panel.call())
-            {
-                ROS_INFO("Received Response");
-            }
-            else
-            {
-                ROS_ERROR("Failed to call perception service");
-                result_.success = false;
-                as_.setSucceeded(result_);
-                return;
-            }
-            
-            Eigen::Vector4f plane_coef_vector;
-            for (int i = 0; i < 4; i ++)
-                plane_coef_vector(i)=srv.response.cloud_plane_coef[i];
-
-            if (srv.response.is_plane_found == false){
-                ROS_ERROR("[segbot_table_approach_as.cpp] Table not found. The end.");
-                result_.success = false;
-                result_.error_msg = "table_not_found";
-                as_.setAborted(result_);
-                return;
-            }
-            
-            //next, make arm safe to move again
-            bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
-            if (!safe) {
-                ROS_ERROR("[segbot_table_approach_as.cpp] Cannot make arm safe for travel! Aborting!");
-                result_.success = false;
-                result_.error_msg = "cannot_make_arm_safe";
-                as_.setAborted(result_);
-                return;
-            }
-            
-            //transform clound into base_link frame of reference
-            sensor_msgs::PointCloud cloud_pc1;
-            sensor_msgs::convertPointCloud2ToPointCloud(srv.response.cloud_plane,cloud_pc1);
-            tf_listener.waitForTransform(srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
-            
-            sensor_msgs::PointCloud transformed_cloud;
-            tf_listener.transformPointCloud("/base_footprint",cloud_pc1,transformed_cloud); 
-                    
-            //convert back to sensor_msgs::PointCloud2 and then to pcl format
-            sensor_msgs::PointCloud2 plane_cloud_pc2;
-            sensor_msgs::convertPointCloudToPointCloud2(transformed_cloud,plane_cloud_pc2);
-            
-            PointCloudT::Ptr cloud_plane (new PointCloudT);
-            pcl::fromROSMsg(plane_cloud_pc2, *cloud_plane);
-            
-            //find the point on the table closest to the robot's 0,0
-            int closest_point_index = -1;
-            double closest_point_distance = 0.0;
-            for (int i = 0; i < (int)cloud_plane->points.size(); i++){
-                double d_i = sqrt(   pow(cloud_plane->points.at(i).x,2) +   pow(cloud_plane->points.at(i).y,2));
-                if (closest_point_index == -1 || d_i < closest_point_distance){
-                    closest_point_index = i;
-                    closest_point_distance = d_i;
-                }
-            }
-            
-            geometry_msgs::PoseStamped pose_debug;
-            pose_debug.header.frame_id = "/base_footprint";
-            pose_debug.header.seq = 1;
-            pose_debug.pose.position.x = cloud_plane->points.at(closest_point_index).x;
-            pose_debug.pose.position.y = cloud_plane->points.at(closest_point_index).y;
-            pose_debug.pose.position.z = cloud_plane->points.at(closest_point_index).z;
-            pose_debug.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0);
-            pose_pub.publish(pose_debug);
-            
-            //calculate turn angle
-            double target_turn_angle = atan2( cloud_plane->points.at(closest_point_index).y, cloud_plane->points.at(closest_point_index).x);
-            
-            
-            double duration = 2.0; //we want to take this many seconds to get there
-            double pub_rate = 30;
-            
-            double turn_velocity = 0.5*target_turn_angle/duration;
-            
-            ros::Rate r(pub_rate);
-            
-            //first, wait for odometry
-            heard_odom = false;
-            while (!heard_odom){
-                r.sleep();
-                ros::spinOnce();
-            }
-            
-            double initial_yaw = getYaw(current_odom.pose.pose);
-            double target_yaw = initial_yaw + target_turn_angle;
-            
-            ROS_INFO("Turn angle = %f",target_turn_angle);
-            
-            
-            geometry_msgs::Twist v_i;
-            v_i.linear.x = 0; v_i.linear.y = 0; v_i.linear.z = 0;
-            v_i.angular.x = 0; v_i.angular.y = 0;
-            
-            //for (int i = 0; i < (int)duration*pub_rate;i++){
-            while (ros::ok()){
-                v_i.angular.z = turn_velocity;
-                //ROS_INFO_STREAM(v_i);
-                
-                pub_base_velocity.publish(v_i);
-                
-                ros::spinOnce();
-                
-                r.sleep();
-                
-                double current_yaw = getYaw(current_odom.pose.pose);
-                
-                if (fabs(current_yaw - target_yaw) < 0.05)
-                    break;
-            }
-             
-            v_i.angular.z = 0;
-            pub_base_velocity.publish(v_i);
-            
-            heard_odom = false;
-            while (!heard_odom){
-                r.sleep();
-                ros::spinOnce();
-            }
-            double final_yaw = getYaw(current_odom.pose.pose);
-            
-           
-        }
-            
-                
-    }
-
-
-};
-
 
 int main (int argc, char** argv){
     //tf mico_link_base
@@ -313,16 +349,134 @@ int main (int argc, char** argv){
     
     posDB = new ArmPositionDB(j_pos_filename, c_pos_filename);
     //service
-    ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", seg_cb);
+    ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", executeCB);
+    
     //refresh rate
     double ros_rate = 3.0;
     ros::Rate r(ros_rate);
     
-    // Main loop:
-    while (!g_caught_sigint && ros::ok()){  
-        //collect messages
-        ros::spinOnce();
-        r.sleep();
+   //step 1: query table_object_detection_node to segment the blobs on the table
+    posDB->print();
+    //first, we need to move the arm out of view so the camera can see the table
+    if (posDB->hasCarteseanPosition("side_view")){
+        geometry_msgs::PoseStamped out_of_view_pose = posDB->getToolPositionStamped("side_view","/mico_link_base");
+        //now go to the pose
+        segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
     }
+     ros::ServiceClient srv = n.serviceClient<elevator_press_button::color_perception>("color_perception", executeCB);
+     ros::ServiceServer client_panel = n.advertiseService<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
+
+        if (client_panel.call())
+        {
+            ROS_INFO("Received Response");
+        }
+        else
+        {
+            ROS_ERROR("Failed to call perception service");
+            return false;
+        }
+        
+        Eigen::Vector4f plane_coef_vector;
+        for (int i = 0; i < 4; i ++)
+            plane_coef_vector(i)=srv.response.cloud_plane_coef[i];
+
+        
+        //next, make arm safe to move again
+        bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
+        if (!safe) {
+            ROS_ERROR("[segbot_table_approach_as.cpp] Cannot make arm safe for travel! Aborting!");
+            return false;
+        }
+        
+        //transform clound into base_link frame of reference
+        sensor_msgs::PointCloud cloud_pc1;
+        sensor_msgs::convertPointCloud2ToPointCloud(srv.response.cloud_plane,cloud_pc1);
+        tf_listener.waitForTransform(srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
+        
+        sensor_msgs::PointCloud transformed_cloud;
+        tf_listener.transformPointCloud("/base_footprint",cloud_pc1,transformed_cloud); 
+                
+        //convert back to sensor_msgs::PointCloud2 and then to pcl format
+        sensor_msgs::PointCloud2 plane_cloud_pc2;
+        sensor_msgs::convertPointCloudToPointCloud2(transformed_cloud,plane_cloud_pc2);
+        
+        PointCloudT::Ptr cloud_plane (new PointCloudT);
+        pcl::fromROSMsg(plane_cloud_pc2, *cloud_plane);
+        
+        //find the point on the table closest to the robot's 0,0
+        int closest_point_index = -1;
+        double closest_point_distance = 0.0;
+        for (int i = 0; i < (int)cloud_plane->points.size(); i++){
+            double d_i = sqrt(   pow(cloud_plane->points.at(i).x,2) +   pow(cloud_plane->points.at(i).y,2));
+            if (closest_point_index == -1 || d_i < closest_point_distance){
+                closest_point_index = i;
+                closest_point_distance = d_i;
+            }
+        }
+        
+        geometry_msgs::PoseStamped pose_debug;
+        pose_debug.header.frame_id = "/base_footprint";
+        pose_debug.header.seq = 1;
+        pose_debug.pose.position.x = cloud_plane->points.at(closest_point_index).x;
+        pose_debug.pose.position.y = cloud_plane->points.at(closest_point_index).y;
+        pose_debug.pose.position.z = cloud_plane->points.at(closest_point_index).z;
+        pose_debug.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0);
+        pose_pub.publish(pose_debug);
+        
+        //calculate turn angle
+        double target_turn_angle = atan2( cloud_plane->points.at(closest_point_index).y, cloud_plane->points.at(closest_point_index).x);
+        
+        
+        double duration = 2.0; //we want to take this many seconds to get there
+        double pub_rate = 30;
+        
+        double turn_velocity = 0.5*target_turn_angle/duration;
+        
+        ros::Rate r(pub_rate);
+        
+        //first, wait for odometry
+        heard_odom = false;
+        while (!heard_odom){
+            r.sleep();
+            ros::spinOnce();
+        }
+        
+        double initial_yaw = getYaw(current_odom.pose.pose);
+        double target_yaw = initial_yaw + target_turn_angle;
+        
+        ROS_INFO("Turn angle = %f",target_turn_angle);
+        
+        
+        geometry_msgs::Twist v_i;
+        v_i.linear.x = 0; v_i.linear.y = 0; v_i.linear.z = 0;
+        v_i.angular.x = 0; v_i.angular.y = 0;
+        
+        //for (int i = 0; i < (int)duration*pub_rate;i++){
+        while (ros::ok()){
+            v_i.angular.z = turn_velocity;
+            //ROS_INFO_STREAM(v_i);
+            
+            pub_base_velocity.publish(v_i);
+            
+            ros::spinOnce();
+            
+            r.sleep();
+            
+            double current_yaw = getYaw(current_odom.pose.pose);
+            
+            if (fabs(current_yaw - target_yaw) < 0.05)
+                break;
+        }
+         
+        v_i.angular.z = 0;
+        pub_base_velocity.publish(v_i);
+        
+        heard_odom = false;
+        while (!heard_odom){
+            r.sleep();
+            ros::spinOnce();
+        }
+        double final_yaw = getYaw(current_odom.pose.pose);
+            
 
 };

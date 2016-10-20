@@ -335,7 +335,9 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     
     //get the plane coefficients
     Eigen::Vector4f plane_coefficients;
-    
+    for (int i = 0; i < 4; i ++){
+        res.cloud_plane_coef[i] = plane_coefficients(i);
+    }
     plane_coefficients(0)=coefficients->values[0];
     plane_coefficients(1)=coefficients->values[1];
     plane_coefficients(2)=coefficients->values[2];
@@ -438,6 +440,8 @@ int main (int argc, char** argv){
     
     //create subscriber to joint angles
     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
+    
+    ros::ServiceClient client = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
     
     //debugging publisher
     debug_pub = n.advertise<sensor_msgs::PointCloud2>("elevator_detector/debug2", 1);
