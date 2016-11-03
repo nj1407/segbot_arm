@@ -39,7 +39,7 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
-
+#include "elevator_press_button/color_perception.h"
 #include <pcl/ModelCoefficients.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -79,10 +79,10 @@ typedef pcl::PointCloud<PointT> PointCloudT;
   
 ros::NodeHandle nh_;
 // NodeHandle instance must be created before this line. Otherwise strange error may occur.
-    
+sensor_msgs::JointState current_state;
 nav_msgs::Odometry current_odom;
 bool heard_odom;
-
+bool new_cloud_available_flag = false;
 ros::Publisher pub_base_velocity;
 ros::Publisher pose_pub;
 ros::Publisher sound_pub;
@@ -91,9 +91,13 @@ ros::Publisher sound_pub;
 tf::TransformListener tf_listener;
 
 ros::Subscriber sub_odom_;
-
+boost::mutex cloud_mutex;
 //holds set of predefined positions
 ArmPositionDB *posDB;
+typedef pcl::PointXYZRGB PointT;
+typedef pcl::PointCloud<PointT> PointCloudT;
+typedef pcl::PointCloud<pcl::PointXYZ> PCLCloudXYZ;
+PointCloudT::Ptr cloud (new PointCloudT);
 
 //odom state cb
 void odom_cb(const nav_msgs::OdometryConstPtr& input){
@@ -110,6 +114,15 @@ void spinSleep(double duration){
     }
 }
 
+void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
+{
+        cloud_mutex.lock ();
+        //convert to PCL format
+        pcl::fromROSMsg (*input, *cloud);
+        //state that a new cloud is available
+        new_cloud_available_flag = true;
+        cloud_mutex.unlock ();
+}
     
 double getYaw(geometry_msgs::Pose pose){
     tf::Quaternion q(pose.orientation.x, 
@@ -123,22 +136,18 @@ double getYaw(geometry_msgs::Pose pose){
     return y;
 }
 
+void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
+    //NUM JOINTS IS 8
+    if (input->position.size() == 8){
+        current_state = *input;
+    }
+}
+
 bool executeCB(elevator_press_button::color_perception::Request &req, elevator_press_button::color_perception::Response &res){
-        ros::ServiceClient client_panel = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
-        
-        if (client_panel.call())
-        {
-            ROS_INFO("Received Response");
-        }
-        else
-        {
-            ROS_ERROR("Failed to call perception service");
-            return false;
-        }
         
         Eigen::Vector4f plane_coef_vector;
         for (int i = 0; i < 4; i ++)
-            plane_coef_vector(i)=srv.response.cloud_plane_coef[i];
+            plane_coef_vector(i)=res.cloud_plane_coef[i];
 
         //next, make arm safe to move again
         bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
@@ -149,8 +158,8 @@ bool executeCB(elevator_press_button::color_perception::Request &req, elevator_p
         
         //transform clound into base_link frame of reference
         sensor_msgs::PointCloud cloud_pc1;
-        sensor_msgs::convertPointCloud2ToPointCloud(srv.response.cloud_plane,cloud_pc1);
-        tf_listener.waitForTransform(srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
+        sensor_msgs::convertPointCloud2ToPointCloud(res.cloud_plane,cloud_pc1);
+        tf_listener.waitForTransform(res.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
         
         sensor_msgs::PointCloud transformed_cloud;
         tf_listener.transformPointCloud("/base_footprint",cloud_pc1,transformed_cloud); 
@@ -238,101 +247,20 @@ bool executeCB(elevator_press_button::color_perception::Request &req, elevator_p
         double final_yaw = getYaw(current_odom.pose.pose);
         
        return true;
-}
 
+}
 int main (int argc, char** argv){
     //tf mico_link_base
     // Initialize ROS
     ros::init (argc, argv, "turn_correction");
-    ros::NodeHandle n;
-    
+    ros::NodeHandle n;;
+
     // Create a ROS subscriber for the input point cloud
     std::string param_topic = "/xtion_camera/depth_registered/points";
     ros::Subscriber sub = n.subscribe (param_topic, 1, cloud_cb);
     
     //create subscriber to joint angles
     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
-
-    //publisher for debugging purposes
-    pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
-    
-    //used to publish sound requests
-    sound_pub = nh_.advertise<sound_play::SoundRequest>("/robotsound", 1);
-    
-    //velocity publisher
-    pub_base_velocity = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-    
-    //load database of joint- and tool-space positions
-    std::string j_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/jointspace_position_db.txt";
-    std::string c_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/toolspace_position_db.txt";
-    
-    posDB = new ArmPositionDB(j_pos_filename, c_pos_filename);
-    //service
-    ros::ServiceServer service = n.advertiseService("pcl_button_filter/color_perception", seg_cb);
-    //refresh rate
-   
-    
-    
-nav_msgs::Odometry current_odom;
-bool heard_odom;
-
-ros::Publisher pub_base_velocity;
-ros::Publisher pose_pub;
-ros::Publisher sound_pub;
-
-//used to compute transforms
-tf::TransformListener tf_listener;
-
-ros::Subscriber sub_odom_;
-
-//holds set of predefined positions
-ArmPositionDB *posDB;
-
-//odom state cb
-void odom_cb(const nav_msgs::OdometryConstPtr& input){
-    current_odom = *input;
-    heard_odom = true;
-}
-
-void spinSleep(double duration){
-    int rateHertz = 40; 
-    ros::Rate r(rateHertz);
-    for(int i = 0; i < (int)duration * rateHertz; i++) {
-        ros::spinOnce();
-        r.sleep();
-    }
-}
-
-    
-double getYaw(geometry_msgs::Pose pose){
-    tf::Quaternion q(pose.orientation.x, 
-                            pose.orientation.y, 
-                            pose.orientation.z, 
-                            pose.orientation.w);
-    tf::Matrix3x3 m(q);
-    
-    double r, p, y;
-    m.getRPY(r, p, y);
-    return y;
-}
-
-
-int main (int argc, char** argv){
-    //tf mico_link_base
-    // Initialize ROS
-    ros::init (argc, argv, "turn_correction");
-    ros::NodeHandle n;
-    
-    // Create a ROS subscriber for the input point cloud
-    std::string param_topic = "/xtion_camera/depth_registered/points";
-    ros::Subscriber sub = n.subscribe (param_topic, 1, cloud_cb);
-    
-    //create subscriber to joint angles
-    ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
-      //subscribe to odometry 
-    sub_odom_= nh_.subscribe("/odom", 1,&TableApproachActionServer::odom_cb,this);
-
-     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
 
     //publisher for debugging purposes
     pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
@@ -363,10 +291,10 @@ int main (int argc, char** argv){
         //now go to the pose
         segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
     }
-     ros::ServiceClient srv = n.serviceClient<elevator_press_button::color_perception>("color_perception", executeCB);
-     ros::ServiceServer client_panel = n.advertiseService<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
-
-        if (client_panel.call())
+    ros::ServiceClient srv = n.serviceClient<elevator_press_button::color_perception>("color_perception", executeCB);
+    ros::ServiceClient client_panel = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
+    elevator_press_button::color_perception panel_srv;  
+        if (client_panel.call(panel_srv))
         {
             ROS_INFO("Received Response");
         }
@@ -378,7 +306,7 @@ int main (int argc, char** argv){
         
         Eigen::Vector4f plane_coef_vector;
         for (int i = 0; i < 4; i ++)
-            plane_coef_vector(i)=srv.response.cloud_plane_coef[i];
+            plane_coef_vector(i)=panel_srv.response.cloud_plane_coef[i];
 
         
         //next, make arm safe to move again
@@ -390,8 +318,8 @@ int main (int argc, char** argv){
         
         //transform clound into base_link frame of reference
         sensor_msgs::PointCloud cloud_pc1;
-        sensor_msgs::convertPointCloud2ToPointCloud(srv.response.cloud_plane,cloud_pc1);
-        tf_listener.waitForTransform(srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
+        sensor_msgs::convertPointCloud2ToPointCloud(panel_srv.response.cloud_plane,cloud_pc1);
+        tf_listener.waitForTransform(panel_srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
         
         sensor_msgs::PointCloud transformed_cloud;
         tf_listener.transformPointCloud("/base_footprint",cloud_pc1,transformed_cloud); 
@@ -431,8 +359,6 @@ int main (int argc, char** argv){
         double pub_rate = 30;
         
         double turn_velocity = 0.5*target_turn_angle/duration;
-        
-        ros::Rate r(pub_rate);
         
         //first, wait for odometry
         heard_odom = false;

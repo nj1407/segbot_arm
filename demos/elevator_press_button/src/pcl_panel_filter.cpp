@@ -387,7 +387,7 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     pcl_ros::transformPointCloud("mico_api_origin", tgt, tgt, listener);
     //listener.transformPointCloud("mico_api_origin", transformed_pc ,transformed_pc); 
     //sensor_msgs::convertPointCloudToPointCloud2(transformed_pc, tgt);
-
+    
     PointCloudT pcl_cloud;
     pcl::fromROSMsg(tgt, pcl_cloud);
     cloud_pub.publish(pcl_cloud);
