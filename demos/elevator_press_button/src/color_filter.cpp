@@ -251,7 +251,7 @@ void waitForCloudK(int k){
     collecting_cloud = false;
 }
 
- PointCloudT color_filter(int max_r, int min_r, int max_g, int min_g, int max_b, int min_b) {
+ PointCloudT::Ptr color_filter(int rMax, int rMin, int gMax, int gMin, int bMax, int bMin) {
 	 
 	ros::NodeHandle n; 
 	 
@@ -267,9 +267,9 @@ void waitForCloudK(int k){
     pcl::ConditionalRemoval<pcl::PointXYZRGB> condrem (color_cond); 
     condrem.setInputCloud (cloud); 
     condrem.setKeepOrganized(true); 
-    PointCloudT cloud_filtered (new PointCloudT);
+    PointCloudT::Ptr cloud_filtered;
     // apply filter 
-    condrem.filter (*cloud_filtered); 
+    condrem.filter(*cloud_filtered); 
     ROS_INFO("Found %i points.",(int)cloud_filtered->points.size ());
 	return cloud_filtered;
  }
@@ -285,12 +285,12 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     cloud = cloud_aggregated;
     ROS_INFO("got cloud");
 
-	PointCloudT filter1 = color_filter(236, 217, 217, 203, 129, 53);
-	PointCloudT filter2 = color_filter(213, 176, 40, 23, 40, 21);
-	PointCloudT filter3 = color_filter(235, 212, 230, 198, 226, 195);
-	PointCloudT filter4 = color_filter(206, 114, 224, 191, 241, 216);
-	PointCloudT filter5 = color_filter(41, 20, 174, 87, 149, 67);
-	PointCloudT filter6 = color_filter(254, 140, 224, 97, 230, 90);
+	PointCloudT filter1 = *color_filter(236, 217, 217, 203, 129, 53);
+	PointCloudT filter2 = *color_filter(213, 176, 40, 23, 40, 21);
+	PointCloudT filter3 = *color_filter(235, 212, 230, 198, 226, 195);
+	PointCloudT filter4 = *color_filter(206, 114, 224, 191, 241, 216);
+	PointCloudT filter5 = *color_filter(41, 20, 174, 87, 149, 67);
+	PointCloudT filter6 = *color_filter(254, 140, 224, 97, 230, 90);
 	elevator_cloud_pub.publish(filter1);
 	
 	
