@@ -19,7 +19,10 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   moveit_msgs
   segbot_arm_manipulation
+  nav_msgs
+  sound_play
 )
+
 
 find_package(PCL 1.2 REQUIRED)
 find_package(OpenCV 2 REQUIRED)
