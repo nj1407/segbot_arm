@@ -253,7 +253,6 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     waitForCloudK(15);
     cloud = cloud_aggregated;
     ROS_INFO("got cloud");
-    test(cloud_aggregated); 
     //filter by color
     // build the condition 
     int rMax = 180; 
