@@ -70,6 +70,8 @@
 #include <sound_play/sound_play.h>
 #include <sound_play/SoundRequest.h>
 
+#include "elevator_press_button/color_perception.h"
+
 /* define what kind of point clouds we're using */
 typedef pcl::PointXYZRGB PointT;
 typedef pcl::PointCloud<PointT> PointCloudT;
@@ -77,7 +79,7 @@ typedef pcl::PointCloud<PointT> PointCloudT;
 //any table further than this away from the sensor will not be seen (in m)
 #define FILTER_Z_VALUE 1.5
   
-ros::NodeHandle nh_;
+
 // NodeHandle instance must be created before this line. Otherwise strange error may occur.
 sensor_msgs::JointState current_state;
 nav_msgs::Odometry current_odom;
@@ -88,7 +90,7 @@ ros::Publisher pose_pub;
 ros::Publisher sound_pub;
 
 //used to compute transforms
-tf::TransformListener tf_listener;
+//tf::TransformListener tf_listener;
 
 ros::Subscriber sub_odom_;
 boost::mutex cloud_mutex;
@@ -144,17 +146,17 @@ void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
 }
 
 bool executeCB(elevator_press_button::color_perception::Request &req, elevator_press_button::color_perception::Response &res){
-        
+		tf::TransformListener tf_listener;
         Eigen::Vector4f plane_coef_vector;
         for (int i = 0; i < 4; i ++)
             plane_coef_vector(i)=res.cloud_plane_coef[i];
 
         //next, make arm safe to move again
-        bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
+        /*bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
         if (!safe) {
             ROS_ERROR("[segbot_table_approach_as.cpp] Cannot make arm safe for travel! Aborting!");
             return false;
-        }
+        }*/
         
         //transform clound into base_link frame of reference
         sensor_msgs::PointCloud cloud_pc1;
@@ -252,8 +254,10 @@ bool executeCB(elevator_press_button::color_perception::Request &req, elevator_p
 int main (int argc, char** argv){
     //tf mico_link_base
     // Initialize ROS
+   
     ros::init (argc, argv, "turn_correction");
-    ros::NodeHandle n;;
+    ros::NodeHandle n;
+    ROS_INFO("Received Response");
 
     // Create a ROS subscriber for the input point cloud
     std::string param_topic = "/xtion_camera/depth_registered/points";
@@ -263,13 +267,13 @@ int main (int argc, char** argv){
     ros::Subscriber sub_angles = n.subscribe ("/joint_states", 1, joint_state_cb);
 
     //publisher for debugging purposes
-    pose_pub = nh_.advertise<geometry_msgs::PoseStamped>("/segbot_table_approach_as/approach_table_target_pose", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("/turn_correct/approach_table_target_pose", 1);
     
     //used to publish sound requests
-    sound_pub = nh_.advertise<sound_play::SoundRequest>("/robotsound", 1);
+    sound_pub = n.advertise<sound_play::SoundRequest>("/robotsound", 1);
     
     //velocity publisher
-    pub_base_velocity = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+    pub_base_velocity = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
     
     //load database of joint- and tool-space positions
     std::string j_pos_filename = ros::package::getPath("segbot_arm_manipulation")+"/data/jointspace_position_db.txt";
@@ -289,7 +293,7 @@ int main (int argc, char** argv){
     if (posDB->hasCarteseanPosition("side_view")){
         geometry_msgs::PoseStamped out_of_view_pose = posDB->getToolPositionStamped("side_view","/mico_link_base");
         //now go to the pose
-        segbot_arm_manipulation::moveToPoseMoveIt(nh_,out_of_view_pose);
+        segbot_arm_manipulation::moveToPoseMoveIt(n,out_of_view_pose);
     }
     ros::ServiceClient srv = n.serviceClient<elevator_press_button::color_perception>("color_perception", executeCB);
     ros::ServiceClient client_panel = n.serviceClient<elevator_press_button::color_perception>("/pcl_button_filter/color_perception");
@@ -310,7 +314,7 @@ int main (int argc, char** argv){
 
         
         //next, make arm safe to move again
-        bool safe = segbot_arm_manipulation::makeSafeForTravel(nh_);
+        bool safe = segbot_arm_manipulation::makeSafeForTravel(n);
         if (!safe) {
             ROS_ERROR("[segbot_table_approach_as.cpp] Cannot make arm safe for travel! Aborting!");
             return false;
@@ -319,6 +323,7 @@ int main (int argc, char** argv){
         //transform clound into base_link frame of reference
         sensor_msgs::PointCloud cloud_pc1;
         sensor_msgs::convertPointCloud2ToPointCloud(panel_srv.response.cloud_plane,cloud_pc1);
+        tf::TransformListener tf_listener;
         tf_listener.waitForTransform(panel_srv.response.cloud_plane.header.frame_id, "/base_footprint", ros::Time(0.0), ros::Duration(3.0)); 
         
         sensor_msgs::PointCloud transformed_cloud;
