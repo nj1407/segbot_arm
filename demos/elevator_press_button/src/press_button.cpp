@@ -164,7 +164,7 @@ void joint_state_cb (const sensor_msgs::JointStateConstPtr& input) {
     if (input->position.size() == NUM_JOINTS){
         current_state = *input;
         heardJoinstState = true;
-    }
+    }   
   //ROS_INFO_STREAM(current_state);
 }
 
@@ -193,7 +193,8 @@ void goal_cb (const geometry_msgs::PoseStampedConstPtr& input)
 {
     ROS_INFO("entered goal_cb");
     first_goal.header = input->header;
-    first_goal.pose = input->pose; 
+    first_goal.pose = input->pose;
+    //fix input for goal 
     first_goal.pose.position.x -= .07;
     second_goal.header = input->header;
     second_goal.pose = input->pose;
@@ -270,7 +271,7 @@ int main (int argc, char** argv)
     //segbot_arm_manipulation::moveToPoseMoveIt(n,first_goal);
     //TODO condisder offset of calibration of arm
     first_goal.pose.position.z -= .0075;
-    first_goal.pose.position.y -= .2;
+    first_goal.pose.position.y -= .05;
     first_goal_pub.publish(first_goal); 
     //made vision calls check in rviz to see if correct then procede
     pressEnter();

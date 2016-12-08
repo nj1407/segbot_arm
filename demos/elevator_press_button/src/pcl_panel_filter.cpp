@@ -241,6 +241,11 @@ void waitForCloudK(int k){
     collecting_cloud = false;
 }
 
+void test(PointCloudT filter){
+    
+    
+}    
+
 bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_press_button::color_perception::Response &res)
 {    
     ROS_INFO("entered seg_cb");
@@ -248,7 +253,7 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     waitForCloudK(15);
     cloud = cloud_aggregated;
     ROS_INFO("got cloud");
-     
+    test(cloud_aggregated); 
     //filter by color
     // build the condition 
     int rMax = 180; 
@@ -400,7 +405,7 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     
     geometry_msgs::PoseStamped goal;
     goal.pose.position.x = centroid.x();
-    goal.pose.position.y = centroid.y();
+    goal.pose.position.y = min.y;
     goal.pose.position.z = centroid.z();
     
     //get it flat (180 degress)
@@ -418,12 +423,36 @@ bool seg_cb(elevator_press_button::color_perception::Request &req, elevator_pres
     ROS_ERROR("%s",ex.what());
     ros::Duration(1.0).sleep();
     }
+    
+    
         
     //set orientation after transforming into arm frame of reference
     goal.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(1.54,0,1.54);
     goal.pose.position.z -= .085;
     goal_pub.publish(goal);
 
+     //transform into the arm's base, transform cloud
+    sensor_msgs::PointCloud2 tgt2=  res.cloud_cluster;
+    std::string sensor_frame_id2 = tgt.header.frame_id;
+    tf::TransformListener listener2;
+    listener2.waitForTransform(sensor_frame_id2, "mico_link_base", ros::Time(0), ros::Duration(3.0));
+    sensor_msgs::PointCloud transformed_pc2;
+    sensor_msgs::convertPointCloud2ToPointCloud(tgt2,transformed_pc2);
+    listener.transformPointCloud("mico_link_base", transformed_pc2 ,transformed_pc2); 
+    sensor_msgs::convertPointCloudToPointCloud2(transformed_pc2, tgt2);
+    //listener.waitForTransform(sensor_frame_id, "mico_api_origin", ros::Time(0), ros::Duration(5.0));
+    pcl_ros::transformPointCloud("mico_link_base", tgt2, tgt2, listener2);
+    //listener.transformPointCloud("mico_api_origin", transformed_pc ,transformed_pc); 
+    //sensor_msgs::convertPointCloudToPointCloud2(transformed_pc, tgt);
+     try{
+    listener2.waitForTransform(cloud_ros.header.frame_id,  "mico_link_base",  ros::Time(0), ros::Duration(5.0) );
+    listener2.transformPose("mico_link_base", goal, goal);
+            
+    }
+    catch (tf::TransformException ex){
+    ROS_ERROR("%s",ex.what());
+    ros::Duration(1.0).sleep();
+    }
     return true;
 
 }   
